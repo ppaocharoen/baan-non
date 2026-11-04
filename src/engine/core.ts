@@ -42,8 +42,9 @@ export const petById = (g: GameState, id: number) => g.pets.find(p => p.id === i
 
 // ---------------- เวลาเดิน ----------------
 
-/** เดินเวลา days วัน ทีละก้าวเล็กๆ แล้วคืนเหตุการณ์ที่เกิด */
-export function advance(g: GameState, days: number): GameEvent[] {
+/** เดินเวลา days วัน ทีละก้าวเล็กๆ แล้วคืนเหตุการณ์ที่เกิด · offline = ช่วงปิดเกม (ความหิว/สกปรกเพิ่มช้าลง) */
+export function advance(g: GameState, days: number, offline = false): GameEvent[] {
+  const needsMult = offline ? B.offlineNeedsMult : 1;
   const events: GameEvent[] = [];
   let left = days;
   while (left > 1e-9) {
@@ -52,12 +53,12 @@ export function advance(g: GameState, days: number): GameEvent[] {
     const before = g.day;
     g.day += dt;
     if (Math.floor(g.day) > Math.floor(before)) events.push({ type: 'newDay', day: Math.floor(g.day) });
-    for (const p of [...g.pets]) stepPet(g, p, dt, events);
+    for (const p of [...g.pets]) stepPet(g, p, dt, needsMult, events);
   }
   return events;
 }
 
-function stepPet(g: GameState, p: Pet, dt: number, events: GameEvent[]) {
+function stepPet(g: GameState, p: Pet, dt: number, needsMult: number, events: GameEvent[]) {
   const stageBefore = petStage(p, g.day - dt);
   // หมดอายุขัย — ทั้งสองโหมด (อยู่บ้านป้าก็แก่ไปด้วย)
   if (petAge(p, g.day) >= p.lifespan) { bury(g, p, 'age'); events.push({ type: 'died', petId: p.id, cause: 'age' }); return; }
@@ -65,16 +66,16 @@ function stepPet(g: GameState, p: Pet, dt: number, events: GameEvent[]) {
   if (stageNow !== stageBefore) events.push({ type: 'stage', petId: p.id, stage: stageNow });
   if (p.status !== 'home') return;
 
-  decayPet(p, dt);
+  decayPet(p, dt, needsMult);
 
   // สุ่มป่วย
-  if (atRisk(p) && nextRandom(g) < B.sickChancePerDay * p.lastFoodSick * dt) {
+  if (atRisk(p) && nextRandom(g) < B.sickChancePerDay * p.lastFoodSick * dt * needsMult) {
     p.sickSince = g.day;
     events.push({ type: 'sick', petId: p.id });
   }
 
   // ถูกละเลยนานมาก
-  const neglected = p.starveDays > B.starveLimit || (p.sickSince !== null && g.day - p.sickSince > B.sickLimit);
+  const neglected = p.starveDays > B.starveLimit || p.sickDays > B.sickLimit;
   if (neglected) {
     if (B.modes[g.mode].neglect === 'die') { bury(g, p, 'neglect'); events.push({ type: 'died', petId: p.id, cause: 'neglect' }); }
     else { p.status = 'away'; events.push({ type: 'runaway', petId: p.id }); }
@@ -93,7 +94,7 @@ export const tickOnline = (g: GameState, seconds: number, nowMs: number) => { g.
 export function catchUpOffline(g: GameState, nowMs: number): { days: number; events: GameEvent[] } {
   const days = offlineDays((nowMs - g.lastReal) / 1000);
   g.lastReal = nowMs;
-  return { days, events: advance(g, days) };
+  return { days, events: advance(g, days, true) };
 }
 
 // ---------------- คำสั่ง ----------------
@@ -106,7 +107,7 @@ export function adopt(g: GameState, breedKey: string, name: string, price = 0): 
   const lifespan = br.life[0] + Math.floor(nextRandom(g) * (br.life[1] - br.life[0] + 1));
   const pet: Pet = {
     id: g.nextId++, breed: br.key, name, born: g.day, lifespan, status: 'home',
-    full: 0.8, clean: 0.8, bond: 0.1, trained: 0, sickSince: null,
+    full: 0.8, clean: 0.8, bond: 0.1, trained: 0, sickSince: null, sickDays: 0,
     hungryDays: 0, dirtyDays: 0, starveDays: 0, lastFoodSick: 1,
     fedBondDay: -1, bathBondDay: -1, playDay: -1, playsToday: 0, lastTrain: -1e9,
   };
@@ -173,6 +174,7 @@ export function treat(g: GameState, id: number): Result {
   if (g.money < B.treatCost) return fail('เงินไม่พอ');
   g.money -= B.treatCost;
   p.sickSince = null;
+  p.sickDays = 0;
   return OK;
 }
 
@@ -185,7 +187,7 @@ export function coax(g: GameState, id: number): Result {
   g.money -= B.coaxCost;
   Object.assign(p, {
     status: 'home', bond: p.bond * B.coaxBondMult, full: B.coaxFull, clean: B.coaxClean,
-    sickSince: null, hungryDays: 0, dirtyDays: 0, starveDays: 0,
+    sickSince: null, sickDays: 0, hungryDays: 0, dirtyDays: 0, starveDays: 0,
   });
   return OK;
 }

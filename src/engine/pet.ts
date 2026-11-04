@@ -19,7 +19,8 @@ export interface Pet {
   trained: number;  // ฝึก 0–1
   /** วันที่เริ่มป่วย (null = ไม่ป่วย) */
   sickSince: number | null;
-  /** ตัวนับต่อเนื่อง (วัน) */
+  /** ตัวนับต่อเนื่อง (วัน · ตอนปิดเกมนับช้าลงเท่ากับความหิว) */
+  sickDays: number;
   hungryDays: number;
   dirtyDays: number;
   starveDays: number;
@@ -60,20 +61,23 @@ export function mood(p: Pet): number {
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 /** ค่าที่เปลี่ยนตามเวลา dt วัน (ไม่สุ่ม) — การสุ่มป่วยอยู่ใน core */
-export function decayPet(p: Pet, dt: number) {
+export function decayPet(p: Pet, dt: number, needsMult = 1) {
   if (p.status !== 'home') return;
-  p.full = clamp01(p.full - B.fullDecay * dt);
-  p.clean = clamp01(p.clean - B.cleanDecay * dt);
+  p.full = clamp01(p.full - B.fullDecay * needsMult * dt);
+  p.clean = clamp01(p.clean - B.cleanDecay * needsMult * dt);
 
-  p.hungryDays = isHungry(p) ? p.hungryDays + dt : 0;
-  p.dirtyDays = isDirty(p) ? p.dirtyDays + dt : 0;
-  p.starveDays = p.full <= 0 ? p.starveDays + dt : 0;
+  // นาฬิกาการละเลยทั้งหมดเดินช้าลงตอนปิดเกม เท่ากับความหิว
+  const ndt = dt * needsMult;
+  p.hungryDays = isHungry(p) ? p.hungryDays + ndt : 0;
+  p.dirtyDays = isDirty(p) ? p.dirtyDays + ndt : 0;
+  p.starveDays = p.full <= 0 ? p.starveDays + ndt : 0;
+  p.sickDays = isSick(p) ? p.sickDays + ndt : 0;
 
   let db = B.bondTogether;
   if (isHungry(p)) db += B.bondHungry;
   if (isDirty(p)) db += B.bondDirty;
   if (isSick(p)) db += B.bondSick;
-  p.bond = clamp01(p.bond + db * dt);
+  p.bond = clamp01(p.bond + db * ndt);
 }
 
 /** อยู่ในช่วงเสี่ยงป่วยไหม */

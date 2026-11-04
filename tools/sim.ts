@@ -112,10 +112,11 @@ function careSession(g: GameState, now: number, minutes: number, rngHits: { rng:
 
 // ---------- รายงาน: ปิดเกมนานแค่ไหนถึงเกิดอะไร (ให้อาหารเต็มก่อนปิด) ----------
 {
-  const hungryAt = (1 - B.hungryBelow) / B.fullDecay;
-  const riskAt = hungryAt + B.riskAfterDays;
-  const starveAt = 1 / B.fullDecay;
-  const neglectAt = starveAt + B.starveLimit;
+  const decay = B.fullDecay * B.offlineNeedsMult;
+  const hungryAt = (1 - B.hungryBelow) / decay;
+  const riskAt = hungryAt + B.riskAfterDays / B.offlineNeedsMult;
+  const starveAt = 1 / decay;
+  const neglectAt = starveAt + B.starveLimit / B.offlineNeedsMult;
   const row = (label: string, d: number) => console.log(`     ${label.padEnd(22)} ${d.toFixed(1).padStart(5)} วันในเกม ≈ ${realHoursOffline(d).toFixed(0).padStart(3)} ชม.จริง`);
   console.log('   ไทม์ไลน์ตอนปิดเกม (ป้อนอาหารเต็มก่อนปิด · เพดาน ' + B.offlineMaxDays + ' วัน ≈ ' + realHoursOffline(B.offlineMaxDays).toFixed(0) + ' ชม.):');
   row('เริ่มหิว', hungryAt);
