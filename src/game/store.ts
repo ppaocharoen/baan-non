@@ -5,7 +5,7 @@ import { newHealth } from '../engine/health';
 const SAVE_KEY = 'baan-non-save';
 const SETTINGS_KEY = 'baan-non-settings';
 
-export interface Settings { theme: string; sound: boolean; }
+export interface Settings { theme: string; sound: boolean; /** ตัวคูณเวลาตอนเปิดเกม (รหัสทดสอบ) */ speed: number; /** ของที่ปลดล็อกด้วยรหัส */ unlocks: string[]; }
 
 function get(key: string): string | null { try { return localStorage.getItem(key); } catch { return null; } }
 function set(key: string, v: string) { try { localStorage.setItem(key, v); } catch { /* โหมดส่วนตัว/พื้นที่เต็ม — เล่นต่อได้แต่ไม่เซฟ */ } }
@@ -43,7 +43,7 @@ export const saveGame = (g: GameState) => set(SAVE_KEY, JSON.stringify(g));
 export function clearGame() { try { localStorage.removeItem(SAVE_KEY); } catch { /* */ } }
 
 export function loadSettings(): Settings {
-  const def: Settings = { theme: 'peach', sound: true };
+  const def: Settings = { theme: 'peach', sound: true, speed: 1, unlocks: [] };
   try { return { ...def, ...JSON.parse(get(SETTINGS_KEY) ?? '{}') }; } catch { return def; }
 }
 export const saveSettings = (s: Settings) => set(SETTINGS_KEY, JSON.stringify(s));

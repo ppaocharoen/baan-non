@@ -1,5 +1,30 @@
-// ภาพของในบ้าน (ชั่วคราว: วาดเป็นพิกเซลด้วยโค้ด จนกว่าจะมีชีตภาพจริง)
-// พิกัดเป็นพิกเซลเกม · (x, y) = กึ่งกลางล่างของชิ้น · ใช้ทั้งในฉากและรูปย่อในร้าน
+// ภาพของในบ้าน: ใช้ชีต furniture.png (ตำแหน่งแต่ละชิ้นใน data/furniture-atlas.json)
+// ถ้าภาพยังไม่โหลด วาดแบบพิกเซลด้วยโค้ดแทน · พิกัดเป็นพิกเซลเกม · (x, y) = กึ่งกลางล่างของชิ้น
+import atlasJson from '../../data/furniture-atlas.json';
+import { furnitureOf } from '../engine/home';
+
+const ATLAS = atlasJson as unknown as Record<string, [number, number, number, number]>;
+const sheet = new Image();
+sheet.src = './art/furniture.png';
+const sheetReady = () => sheet.complete && sheet.naturalWidth > 0;
+export const whenSheetReady = (fn: () => void) => { if (sheetReady()) fn(); else sheet.addEventListener('load', fn, { once: true }); };
+
+/** ความกว้างในฉาก (พิกเซลเกม) */
+const worldW = (key: string, S: number) => (key === 'poop' ? 8 : key === 'dropping' ? 5 : (furnitureOf(key)?.w ?? 12) * S);
+/** ความสูงในฉาก (พิกเซลเกม) — ใช้ทำกล่องแตะและวางน้องบนที่นอน */
+export function itemHeight(key: string, S = ITEM_SCALE_DEFAULT): number {
+  const a = ATLAS[key];
+  if (a && sheetReady()) return (a[3] * worldW(key, S)) / a[2];
+  return (ITEM_H[key] ?? 10) * S;
+}
+const ITEM_SCALE_DEFAULT = 1.6;
+function sprite(c: CanvasRenderingContext2D, key: string, x: number, y: number, rx: (v: number) => number, S: number): boolean {
+  const a = ATLAS[key];
+  if (!a || !sheetReady()) return false;
+  const w = worldW(key, S), h = (a[3] * w) / a[2];
+  c.drawImage(sheet, a[0], a[1], a[2], a[3], rx(x - w / 2), rx(y - h), rx(w), rx(h));
+  return true;
+}
 
 type R = (x: number, y: number, w: number, h: number, c: string) => void;
 
@@ -17,7 +42,9 @@ export const ITEM_SCALE = 1.6;
 
 export function drawItem(c: CanvasRenderingContext2D, key: string, x: number, y: number, rx: (v: number) => number, t = 0, fill = 0, cap = 0, night = 0, S = ITEM_SCALE) {
   const r: R = (dx, dy, w, h, col) => { c.fillStyle = col; c.fillRect(rx(x + dx * S), rx(y + dy * S), rx(w * S), rx(h * S)); };
-  switch (key) {
+  if (sprite(c, key, x, y, rx, S)) {
+    if (key === 'lamp' && night > 0.3) { c.fillStyle = `rgba(255,210,120,${0.18 * night})`; c.fillRect(rx(x - 12 * S), rx(y - 24 * S), rx(24 * S), rx(24 * S)); }
+  } else switch (key) {
     case 'bed':
       r(-11, -6, 22, 6, P.ink); r(-10, -7, 20, 6, P.red); r(-8, -6, 16, 3, P.cream); r(-10, -2, 20, 1, P.redD);
       break;
@@ -71,14 +98,15 @@ export function drawItem(c: CanvasRenderingContext2D, key: string, x: number, y:
   }
   // ห้องน้ำ/ถาด: บอกว่าเต็มแค่ไหน
   if (cap > 0 && fill > 0) {
-    for (let i = 0; i < Math.min(fill, 6); i++) r(-7 + i * 3, key === 'cage' ? -3 : -7, 2, 2, P.poop);
+    for (let i = 0; i < Math.min(fill, 6); i++) r(-7 + i * 3, key === 'cage' ? -2 : -6, 2, 2, P.poop);
     if (fill >= cap) { r(-1, -18, 2, 5, '#A32D2D'); r(-1, -12, 2, 2, '#A32D2D'); }
   }
 }
 
 export function drawPoop(c: CanvasRenderingContext2D, x: number, y: number, rx: (v: number) => number, small: boolean, t: number, age: number, S = 1.5) {
   const r: R = (dx, dy, w, h, col) => { c.fillStyle = col; c.fillRect(rx(x + dx * S), rx(y + dy * S), rx(w * S), rx(h * S)); };
-  if (small) { r(-1, -2, 3, 2, P.white); r(0, -2, 1, 1, '#9a9a8c'); }
+  if (sprite(c, small ? 'dropping' : 'poop', x, y, rx, 1)) { /* ภาพจริง */ }
+  else if (small) { r(-1, -2, 3, 2, P.white); r(0, -2, 1, 1, '#9a9a8c'); }
   else { r(-3, -2, 6, 2, P.poopD); r(-2, -3, 5, 2, P.poop); r(-1, -5, 3, 2, P.poop); r(0, -6, 1, 1, P.poopD); }
   // แมลงวันวนเมื่ออึค้างนาน
   if (age > 0.5) for (let i = 0; i < 2; i++) {
@@ -95,5 +123,12 @@ export function itemThumb(cv: HTMLCanvasElement, key: string) {
   const c = cv.getContext('2d')!;
   c.imageSmoothingEnabled = false;
   c.setTransform(k, 0, 0, k, 0, 0);
-  drawItem(c, key, W / 2, H - 1, v => Math.round(v), 0, 0, 0, 0, 1);
+  const draw = () => {
+    const h = itemHeight(key, 1), w = worldW(key, 1), fit = Math.min(1, (H - 2) / h, (W - 2) / w);
+    c.setTransform(k, 0, 0, k, 0, 0); c.clearRect(0, 0, W, H);
+    c.save(); c.translate(W / 2, H - 1); c.scale(fit, fit);
+    drawItem(c, key, 0, 0, v => v, 0, 0, 0, 0, 1);
+    c.restore();
+  };
+  draw(); whenSheetReady(draw);
 }

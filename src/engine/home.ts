@@ -29,7 +29,8 @@ export const supplyOf = (k: string) => SHOP.supplies.find(s => s.key === k)!;
 export interface HomeItem { uid: number; key: string; /** null = เก็บอยู่ในคลัง */ x: number | null; lane: 0 | 1; fill: number; }
 export interface Poop { id: number; x: number; day: number; petId: number; small: boolean; }
 
-export const FLOOR: [number, number] = [20, 230];
+/** แนวพื้นที่เดินได้ (พิกัดโลก) ตามภาพฉากชานบ้าน: ระหว่างผนังซ้ายกับกระถาง/โอ่งขวา */
+export const FLOOR: [number, number] = [40, 208];
 export const POOP_CAP = 4;            // อึบนพื้นสะสมได้สูงสุด (กันกลับมาเจอบ้านพัง)
 export const HYGIENE = {
   cleanMultPerPoop: 0.2,              // ความสกปรกเพิ่มเร็วขึ้นต่ออึ 1 กอง

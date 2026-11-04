@@ -112,3 +112,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .editbar .cta { width: auto; margin: 0; padding: 6px 12px; }
 .ver { display: block; text-align: center; margin-top: 10px; font-size: 12px; opacity: .55; width: 100%; }
 .splash .ver { position: absolute; bottom: calc(env(safe-area-inset-bottom) + 14px); margin: 0; color: var(--ink); }
+.ic2 { display: inline-block; width: 30px; height: 23px; background-repeat: no-repeat; image-rendering: pixelated; }
+.ic2.sm { width: 18px; height: 14px; }
+.coin { width: 16px; height: 16px; image-rendering: pixelated; vertical-align: -3px; margin-left: 2px; }
+.chip .coin { margin: 0; }

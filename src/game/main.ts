@@ -3,7 +3,7 @@ import './game.css';
 import { BALANCE as B, type Mode } from '../engine/balance';
 import { BREEDS, FOODS, breedOf } from '../engine/content';
 import {
-  adopt, bathe, canTrain, catchUpOffline, coax, daysUntilTrain, feed, newGame, petById, play, routineCare, tickOnline, train, treat, vaccinate,
+  adopt, advance, bathe, canTrain, catchUpOffline, coax, daysUntilTrain, feed, newGame, petById, play, routineCare, tickOnline, train, treat, vaccinate,
   type GameEvent, type GameState,
 } from '../engine/core';
 import { careFor, careState, diseaseOf, dueItems, HEALTH, vaccineState, vaccinesFor, type ItemState } from '../engine/health';
@@ -16,12 +16,13 @@ import { runTraining } from './train';
 import { petPitch, sfx } from './sound';
 import { itemThumb } from './furniture';
 import { CHANGELOG, VERSION } from './changelog';
+import { checkCode } from './codes';
 import { buyFurniture, buySupply, cleanPoop, emptyToilet, furnitureOf, placeItem, SHOP, storeItem, supplyOf, toiletCap, type Furniture } from '../engine/home';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
-/** ?speed=60 เร่งเวลาตอนเปิดเกม (ทดสอบ) */
-const SPEED = Math.max(1, Number(params.get('speed')) || 1);
+/** ?speed=60 หรือรหัสเร่งเวลา: เร่งเวลาตอนเปิดเกม (ทดสอบ) */
+const urlSpeed = Number(params.get('speed')) || 0;
 
 let g: GameState | null = loadGame();
 const settings = loadSettings();
@@ -36,6 +37,14 @@ const voice = (p: Pet, mood: 'happy' | 'normal' | 'sad' = 'normal', delayMs = 0)
 };
 let selId: number | null = null;
 
+// ---------- ไอคอนจากชีต icons.png (4×3 ช่องละ 48×37) ----------
+function iconize(el: HTMLElement) {
+  const i = Number(el.dataset.i), w = el.offsetWidth || 30, h = el.offsetHeight || 23;
+  el.style.backgroundImage = 'url(./art/icons.png)';
+  el.style.backgroundSize = `${w * 4}px ${h * 3}px`;
+  el.style.backgroundPosition = `${-(i % 4) * w}px ${-Math.floor(i / 4) * h}px`;
+}
+document.querySelectorAll<HTMLElement>('.ic2').forEach(iconize);
 // ---------- ไอคอนปุ่มจากชีตไอเทม ----------
 for (const el of document.querySelectorAll<HTMLElement>('.ic')) {
   const i = Number(el.dataset.ic);
@@ -61,6 +70,8 @@ const sel = (): Pet | undefined => (g && selId !== null ? petById(g, selId) : un
 const nameOf = (id: number) => g?.pets.find(p => p.id === id)?.name ?? g?.heaven.find(h => h.id === id)?.name ?? 'น้อง';
 const fmtMoney = (v: number) => Math.floor(v).toLocaleString('th-TH');
 const STAGES = ['วัยเด็ก', 'วัยโต', 'วัยชรา'];
+/** เหรียญตราอุ้งเท้า */
+const COIN = '<img class="coin" src="./art/coin.png" alt="เหรียญ" />';
 
 let toastTimer = 0;
 function toast(msg: string, ms = 2600) {
@@ -151,7 +162,7 @@ function doPlay(id: number) {
 }
 function doFeed() {
   const p = need(); if (!p || !g) return;
-  const s = openPop(`${head(`ให้อาหาร ${p.name}`)}${FOODS.map(f => `<button class="opt" data-f="${f.key}" ${g!.money < f.price ? 'disabled' : ''}><span>${f.name}</span><span>${f.price} 🪙</span></button>`).join('')}`);
+  const s = openPop(`${head(`ให้อาหาร ${p.name}`)}${FOODS.map(f => `<button class="opt" data-f="${f.key}" ${g!.money < f.price ? 'disabled' : ''}><span>${f.name}</span><span>${f.price}${COIN}</span></button>`).join('')}`);
   s.querySelectorAll<HTMLElement>('[data-f]').forEach(el => el.addEventListener('click', () => {
     const r = feed(g!, p.id, el.dataset.f!);
     closePop();
@@ -205,10 +216,10 @@ function doClinic() {
   const total = [...due.vax, ...due.care].reduce((a, x) => a + x.price, 0);
   const s = openPop(`${head(`คลินิกสัตว์ · ${p.name}`)}
     ${sick ? `<div class="alert"><b>อาการ:</b> ${sick.symptom}<br><b>หมอวินิจฉัย:</b> ${sick.name}<br><small>ไม่รักษาเกิน ${sick.limit} วัน น้องจะ${g.mode === 'hard' ? 'จากไป' : 'หนีไปบ้านป้า'}</small>
-      <button class="cta" id="treat" ${g.money < sick.price ? 'disabled' : ''}>รักษาด้วย${sick.med} ${sick.price} 🪙</button></div>` : ''}
+      <button class="cta" id="treat" ${g.money < sick.price ? 'disabled' : ''}>รักษาด้วย${sick.med} ${sick.price}${COIN}</button></div>` : ''}
     ${vax ? `<p><b>สมุดวัคซีน</b></p>${vax}` : `<p><b>สมุดวัคซีน</b><br><small>นกไม่มีวัคซีนประจำ ดูแลด้วยการถ่ายพยาธิและวิตามิน</small></p>`}
     <p><b>ดูแลประจำ</b></p>${care}
-    ${total && !sick ? `<button class="cta" id="all" ${g.money < total ? 'disabled' : ''}>ทำที่ถึงกำหนดทั้งหมด ${total} 🪙</button>` : ''}
+    ${total && !sick ? `<button class="cta" id="all" ${g.money < total ? 'disabled' : ''}>ทำที่ถึงกำหนดทั้งหมด ${total}${COIN}</button>` : ''}
     <p><small>${HEALTH.note}</small></p>`, true);
   const after = (r: { ok: boolean; reason?: string }, msg: string) => { if (!r.ok) toast(r.reason!); else toast(msg); doClinic(); };
   s.querySelector('#treat')?.addEventListener('click', () => {
@@ -244,13 +255,15 @@ function menu() {
   const s = openPop(`${head('เมนู')}
     <button class="opt" id="m-theme"><span>สีตัวเครื่อง</span>›</button>
     <button class="opt" id="m-sound"><span>เสียง</span><span>${settings.sound ? 'เปิด' : 'ปิด'}</span></button>
-    <button class="opt" id="m-adopt" ${g.pets.length >= B.maxPets ? 'disabled' : ''}><span>รับน้องเพิ่ม<br><small>${g.pets.length >= B.maxPets ? `บ้านนี้เลี้ยงได้ ${B.maxPets} ตัว` : `ค่ารับเลี้ยง ${B.adoptPrice} 🪙`}</small></span>›</button>
+    <button class="opt" id="m-adopt" ${g.pets.length >= B.maxPets ? 'disabled' : ''}><span>รับน้องเพิ่ม<br><small>${g.pets.length >= B.maxPets ? `บ้านนี้เลี้ยงได้ ${B.maxPets} ตัว` : `ค่ารับเลี้ยง ${B.adoptPrice}${COIN}`}</small></span>›</button>
     <button class="opt" id="m-heaven"><span>สวนสวรรค์สัตว์เลี้ยง<br><small>${g.heaven.length} ตัว</small></span>›</button>
     <button class="opt" id="m-info"><span>เกี่ยวกับเกม<br><small>โหมด${g.mode === 'hard' ? 'เข้ม' : 'ปกติ'}</small></span>›</button>
+    <button class="opt" id="m-code"><span>ใส่รหัส</span>›</button>
     <button class="opt" id="m-reset"><span>เริ่มเกมใหม่</span>›</button>
     <button class="ver" id="m-ver">v${VERSION} · ดูสิ่งที่เปลี่ยน</button>`);
   s.querySelector('#m-ver')!.addEventListener('click', changelog);
   s.querySelector('#m-theme')!.addEventListener('click', themePicker);
+  s.querySelector('#m-code')!.addEventListener('click', codePrompt);
   s.querySelector('#m-sound')!.addEventListener('click', e => {
     settings.sound = !settings.sound; sfx.enabled = settings.sound; saveSettings(settings);
     (e.currentTarget as HTMLElement).lastElementChild!.textContent = settings.sound ? 'เปิด' : 'ปิด';
@@ -269,11 +282,35 @@ function menu() {
     c.querySelector('#yes')!.addEventListener('click', () => { clearGame(); g = null; selId = null; welcome(); });
   });
 }
+function codePrompt() {
+  const s = openPop(`${head('ใส่รหัส')}<p>รหัสทดสอบหรือรหัสปลดล็อกของพิเศษ</p><input id="code" autocomplete="off" autocapitalize="characters" /><button class="cta" id="go">ตกลง</button>`);
+  const inp = s.querySelector<HTMLInputElement>('#code')!;
+  inp.focus();
+  const go = async () => {
+    const eff = await checkCode(inp.value);
+    if (!eff || !g) { sfx.miss(); toast('รหัสไม่ถูกต้อง'); return; }
+    closePop(); sfx.ding();
+    switch (eff) {
+      case 'money': g.money += 1000; toast('ได้ 1,000 เหรียญ'); break;
+      case 'fast': settings.speed = 60; saveSettings(settings); toast('เร่งเวลา ×60 (ใส่รหัสช้าเพื่อกลับปกติ)', 3500); break;
+      case 'slow': settings.speed = 1; saveSettings(settings); toast('เวลากลับเป็นปกติ'); break;
+      case 'skip': handle(advance(g, 1)); toast('ข้ามไป 1 วันในเกม'); break;
+      case 'heal':
+        for (const p of g.pets) { p.health.disease = null; p.sickDays = 0; p.full = 1; p.clean = 1; p.status = 'home'; p.starveDays = 0; }
+        g.poops = []; toast('น้องทุกตัวแข็งแรง อิ่ม สะอาด'); break;
+      case 'gold':
+        if (!settings.unlocks.includes('gold')) settings.unlocks.push('gold');
+        settings.theme = 'gold'; applyTheme('gold'); saveSettings(settings); toast('ปลดล็อกสีเครื่อง "ทองคำ" ✦', 3500); break;
+    }
+  };
+  s.querySelector('#go')!.addEventListener('click', go);
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') void go(); });
+}
 function changelog() {
   openPop(`${head(`บ้านน้อน v${VERSION}`)}${CHANGELOG.map(c => `<p class="sec">v${c.v} <small>${c.date}</small></p>${c.items.map(i => `<div class="row"><span>• ${i}</span></div>`).join('')}`).join('')}`, true);
 }
 function themePicker() {
-  const s = openPop(`${head('สีตัวเครื่อง')}<div class="grid">${THEMES.map(t => `<button class="opt ${t.key === settings.theme ? 'sel' : ''}" data-t="${t.key}"><span class="swatch" style="background:${t.shell};border-color:${t.ink}"></span>${t.name}</button>`).join('')}</div>`, true);
+  const s = openPop(`${head('สีตัวเครื่อง')}<div class="grid">${THEMES.filter(t => !t.locked || settings.unlocks.includes(t.locked)).map(t => `<button class="opt ${t.key === settings.theme ? 'sel' : ''}" data-t="${t.key}"><span class="swatch" style="background:${t.shell};border-color:${t.ink}"></span>${t.name}</button>`).join('')}</div>`, true);
   s.querySelectorAll<HTMLElement>('[data-t]').forEach(el => el.addEventListener('click', () => {
     settings.theme = el.dataset.t!; applyTheme(settings.theme); saveSettings(settings);
     s.querySelectorAll('.sel').forEach(x => x.classList.remove('sel')); el.classList.add('sel');
@@ -304,12 +341,12 @@ const KIND_TH: Record<string, string> = { bed: 'ที่นอน', toilet: '�
 function shop() {
   if (!g) return;
   const owned = (k: string) => g!.items.filter(i => i.key === k).length;
-  const row = (f: Furniture) => `<div class="shop-row"><canvas data-k="${f.key}"></canvas><span>${f.name}${owned(f.key) ? ` <small style="display:inline">(มี ${owned(f.key)})</small>` : ''}<small>${f.desc}</small><span class="tags">${f.species.length ? f.species.map(x => SPECIES_TH[x]).join(' · ') : 'ทุกตัว'}</span></span><button class="cta mini" data-buy="${f.key}" ${g!.money < f.price ? 'disabled' : ''}>${f.price} 🪙</button></div>`;
+  const row = (f: Furniture) => `<div class="shop-row"><canvas data-k="${f.key}"></canvas><span>${f.name}${owned(f.key) ? ` <small style="display:inline">(มี ${owned(f.key)})</small>` : ''}<small>${f.desc}</small><span class="tags">${f.species.length ? f.species.map(x => SPECIES_TH[x]).join(' · ') : 'ทุกตัว'}</span></span><button class="cta mini" data-buy="${f.key}" ${g!.money < f.price ? 'disabled' : ''}>${f.price}${COIN}</button></div>`;
   const kinds = ['bed', 'toilet', 'bowl', 'toy', 'decor'];
-  const s = openPop(`${head('เพ็ทช็อปปากซอย')}<p>เงิน ${fmtMoney(g.money)} 🪙 · ซื้อแล้ววางในฉากได้ทันที</p>
+  const s = openPop(`${head('เพ็ทช็อปปากซอย')}<p>เงิน ${fmtMoney(g.money)}${COIN} · ซื้อแล้ววางในฉากได้ทันที</p>
     ${kinds.map(k => `<p class="sec">${KIND_TH[k]}</p>${SHOP.furniture.filter(f => f.kind === k).map(row).join('')}`).join('')}
     <p class="sec">ของสิ้นเปลือง</p>
-    ${SHOP.supplies.map(su => `<div class="shop-row"><span style="font-size:22px;text-align:center">${{ sand: '🧂', pad: '🧻', shampoo: '🧴', treat: '🦴' }[su.key] ?? '•'}</span><span>${su.name} <small style="display:inline">(เหลือ ${g!.supplies[su.key] ?? 0} ครั้ง)</small><small>${su.desc}</small></span><button class="cta mini" data-sup="${su.key}" ${g!.money < su.price ? 'disabled' : ''}>${su.price} 🪙</button></div>`).join('')}`, true);
+    ${SHOP.supplies.map(su => `<div class="shop-row"><span style="font-size:22px;text-align:center">${{ sand: '🧂', pad: '🧻', shampoo: '🧴', treat: '🦴' }[su.key] ?? '•'}</span><span>${su.name} <small style="display:inline">(เหลือ ${g!.supplies[su.key] ?? 0} ครั้ง)</small><small>${su.desc}</small></span><button class="cta mini" data-sup="${su.key}" ${g!.money < su.price ? 'disabled' : ''}>${su.price}${COIN}</button></div>`).join('')}`, true);
   s.querySelectorAll<HTMLCanvasElement>('canvas[data-k]').forEach(cv => itemThumb(cv, cv.dataset.k!));
   s.querySelectorAll<HTMLElement>('[data-buy]').forEach(el => el.addEventListener('click', () => {
     const r = buyFurniture(g!, el.dataset.buy!);
@@ -398,7 +435,7 @@ function seg(id: string, v: number, warn = false) {
 function renderHud() {
   if (!g) return;
   const c = calendar(g.day), hh = Math.floor(c.hour), mm = Math.floor((c.hour - hh) * 60 / 10) * 10;
-  $('ic-time').textContent = nightness(g.day) > 0.5 ? '☾' : '☀';
+  $('ic-time').dataset.i = nightness(g.day) > 0.5 ? '5' : '4'; iconize($('ic-time'));
   $('time').textContent = `ฤดู${SEASONS[c.season]} วัน ${c.dayOfSeason} · ${hh}:${String(mm).padStart(2, '0')}`;
   $('money').textContent = fmtMoney(g.money);
   const p = sel();
@@ -423,7 +460,7 @@ function renderHud() {
   if (p && p.status === 'away') {
     if (!banner.dataset.away || banner.dataset.away !== String(p.id)) {
       banner.dataset.away = String(p.id);
-      banner.innerHTML = `${p.name} หนีไปอยู่บ้านป้าข้างบ้าน<button class="cta">ไปง้อกลับ ${B.coaxCost} 🪙</button>`;
+      banner.innerHTML = `${p.name} หนีไปอยู่บ้านป้าข้างบ้าน<button class="cta">ไปง้อกลับ ${B.coaxCost}${COIN}</button>`;
       banner.querySelector('button')!.addEventListener('click', () => {
         const r = coax(g!, p.id);
         if (!r.ok) { toast(r.reason!); return; }
@@ -475,7 +512,7 @@ function chatter(dt: number) {
 function frame(now: number) {
   const dt = Math.min(0.25, (now - last) / 1000); last = now;
   if (g) {
-    handle(tickOnline(g, dt * SPEED, Date.now()));
+    handle(tickOnline(g, dt * (urlSpeed || settings.speed || 1), Date.now()));
     scene.update(g, dt);
     scene.draw(g);
     if ((hudT -= dt) <= 0) { hudT = 0.25; renderHud(); }

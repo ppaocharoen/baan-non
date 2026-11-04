@@ -3,21 +3,22 @@
 // รับแตะ/กดค้าง/ปัด · โหมดจัดบ้านลากของได้
 import { breedOf, foodOf, type Breed } from '../engine/content';
 import type { GameState } from '../engine/core';
-import { assignBeds, fits, furnitureOf, placed, toiletCap, type HomeItem } from '../engine/home';
+import { assignBeds, fits, FLOOR, furnitureOf, placed, toiletCap, type HomeItem } from '../engine/home';
 import { isPostVax, isSick, petStage, type Pet } from '../engine/pet';
 import { nightness } from '../engine/time';
 import { Ambient } from './ambient';
-import { drawItem, drawPoop, ITEM_H, ITEM_SCALE } from './furniture';
+import { drawItem, drawPoop, itemHeight, ITEM_SCALE } from './furniture';
 
 /** ความสูงโลก (พิกเซลเกม) — ความกว้างโลกตามสัดส่วนภาพฉาก */
 const WORLD_H = 168;
 const GROUND = 142;
-const FLOOR_L = 18, FLOOR_R_PAD = 18;
+/** แนวเดินบนพื้นตามภาพฉาก: ซ้ายไม่เข้าผนัง/ประตู · ขวาไม่ชนกระถางและโอ่ง */
+const FLOOR_L = FLOOR[0], FLOOR_R = FLOOR[1];
 /** แนวเท้าของแถวของ: 0 = แถวหลัง (ชิดราว) · 1 = แถวหน้า */
 const LANE_Y = [GROUND + 2, GROUND + 16];
 /** ที่ที่น้องขึ้นไปอยู่ได้ (พิกัดโลก): 0 พื้น · 1 ม้านั่งกลางฉาก · 2 ราวระเบียง (เฉพาะแมวกับนก) */
 const PERCH = [
-  { x0: FLOOR_L, x1: 1e9, y: GROUND + 4 },
+  { x0: FLOOR_L, x1: FLOOR_R, y: GROUND + 4 },
   { x0: 89, x1: 130, y: 108 },
   { x0: 72, x1: 162, y: 90 },
 ];
@@ -180,14 +181,14 @@ export class Scene {
     if (!a || !g) return;
     const p = g.pets.find(x => x.id === id);
     const target = p && (action === 'eat' ? this.itemOf('bowl', p, g) : Math.random() < 0.6 ? this.itemOf('toy', p, g) : undefined);
-    if (target && target.x !== null) { this.go(a, { x: target.x + (a.x < target.x ? -10 : 10), action, dur: action === 'eat' ? 3 : 2.2, food }); return; }
+    if (target && target.x !== null) { this.go(a, { x: Math.max(FLOOR_L, Math.min(FLOOR_R, target.x + (a.x < target.x ? -10 : 10))), action, dur: action === 'eat' ? 3 : 2.2, food }); return; }
     if (a.perch && action === 'eat') { this.go(a, { x: a.x, action, dur: 3, food, perch: a.perch }); return; }
     a.action = action; a.until = this.t + (action === 'eat' ? 3 : 2.2); a.food = food; a.plan = null;
   }
   /** น้องไปขับถ่ายที่ x */
   goPoop(id: number, x: number) {
     const a = this.actors.get(id);
-    if (a) this.go(a, { x, action: 'squat', dur: 1.4 });
+    if (a) this.go(a, { x: Math.max(FLOOR_L, Math.min(FLOOR_R, x)), action: 'squat', dur: 1.4 });
   }
   private go(a: Actor, plan: Plan) {
     a.plan = plan;
@@ -216,7 +217,7 @@ export class Scene {
     for (const id of ids) {
       if (!this.actors.has(id)) {
         const others = [...this.actors.values()].map(a => a.x);
-        const cands = [0.25, 0.4, 0.55, 0.7].map(f => this.camX + this.viewW * f);
+        const cands = [0.25, 0.4, 0.55, 0.7].map(f => Math.max(FLOOR_L, Math.min(FLOOR_R, this.camX + this.viewW * f)));
         const dist = (v: number) => Math.min(Infinity, ...others.map(o => Math.abs(o - v)));
         const x = cands.reduce((best, c) => (dist(c) > dist(best) ? c : best), cands[1]);
         this.actors.set(id, { id, x, face: 1, target: x, action: 'idle', until: 0, walkT: 0, nextThink: this.t + 1, food: 'rice', perch: 0, jump: 0, jumpFrom: 0, jumpTo: 0, plan: null, bedY: null });
@@ -243,14 +244,14 @@ export class Scene {
     // บางทีกระโดดขึ้นที่สูง (หรือลงมา): ม้านั่งได้ทุกตัว · ราวระเบียงเฉพาะแมวกับนก
     const sp = breedOf(p.breed).species, climber = sp === 'cat' || sp === 'bird';
     if (canJump && Math.random() < (climber ? 0.25 : 0.18)) {
-      if (a.perch) { this.go(a, { x: Math.max(FLOOR_L, Math.min(this.worldW - FLOOR_R_PAD, a.x + (Math.random() - 0.5) * 60)), action: 'idle', dur: 0 }); return; }
+      if (a.perch) { this.go(a, { x: Math.max(FLOOR_L, Math.min(FLOOR_R, a.x + (Math.random() - 0.5) * 60)), action: 'idle', dur: 0 }); return; }
       const k = climber && Math.random() < 0.55 ? 2 : 1;
       const px = PERCH[k].x0 + 4 + Math.random() * (PERCH[k].x1 - PERCH[k].x0 - 8);
       this.go(a, { x: px, action: Math.random() < 0.35 ? 'sleep' : 'idle', dur: 6 + Math.random() * 8, perch: k });
       return;
     }
     if (a.perch) { a.target = clampPerch(a.perch, a.x + (Math.random() - 0.5) * (a.perch === 2 ? 40 : 20)); a.action = 'walk'; return; }
-    a.target = Math.max(FLOOR_L, Math.min(this.worldW - FLOOR_R_PAD, a.x + (Math.random() - 0.5) * 120));
+    a.target = Math.max(FLOOR_L, Math.min(FLOOR_R, a.x + (Math.random() - 0.5) * 120));
     a.action = 'walk';
   }
 
@@ -273,6 +274,7 @@ export class Scene {
         }
         continue;
       }
+      if (a.perch === 0 && a.jump === 0) a.x = Math.max(FLOOR_L, Math.min(FLOOR_R, a.x)); // เซฟเก่าที่อยู่นอกแนวเดิน
       if (a.action === 'walk') {
         const dx = a.target - a.x, speed = petStage(p, g.day) === 2 ? 12 : a.perch === 2 ? 10 : a.plan ? 26 : 20;
         if (Math.abs(dx) < 1) {
@@ -321,8 +323,10 @@ export class Scene {
     const pets = g.pets.filter(p => this.actors.has(p.id)).map(p => ({ p, a: this.actors.get(p.id)! }));
     // ชั้นหลังสุด: น้องบนราวระเบียง แล้วบนม้านั่ง
     for (const k of [2, 1]) for (const { p, a } of pets.filter(x => x.a.perch === k && x.a.jump === 0).sort((u, v) => u.a.x - v.a.x)) this.drawPet(p, a, g);
-    // ของแถวหลัง
-    for (const it of placed(g).filter(i => i.lane === 0)) this.drawHomeItem(it, n);
+    // ของแบนติดพื้น (เสื่อ แผ่นรอง) ก่อน แล้วของแถวหลัง
+    const flat = (k: string) => k === 'rug' || k === 'coolmat' || k === 'peepad';
+    for (const it of placed(g).filter(i => flat(i.key))) this.drawHomeItem(it, n);
+    for (const it of placed(g).filter(i => i.lane === 0 && !flat(i.key))) this.drawHomeItem(it, n);
     // อึ
     for (const po of g.poops) {
       const x = po.x - this.camX, y = GROUND + 6;
@@ -332,7 +336,7 @@ export class Scene {
     // น้องบนพื้น (และกำลังกระโดด)
     for (const { p, a } of pets.filter(x => x.a.perch === 0 || x.a.jump > 0).sort((u, v) => u.a.x - v.a.x)) this.drawPet(p, a, g);
     // ของแถวหน้า
-    for (const it of placed(g).filter(i => i.lane === 1)) this.drawHomeItem(it, n);
+    for (const it of placed(g).filter(i => i.lane === 1 && !flat(i.key))) this.drawHomeItem(it, n);
     this.ambient.drawFront(c, { camX: this.camX, s, rx: this.rx, n });
     if (this.editMode) {
       c.fillStyle = 'rgba(4,52,44,0.12)';
@@ -343,7 +347,7 @@ export class Scene {
   private drawHomeItem(it: HomeItem, n: number) {
     const f = furnitureOf(it.key), x = it.x! - this.camX, y = LANE_Y[it.lane];
     drawItem(this.ctx, it.key, x, y, this.rx, this.t, it.fill, toiletCap(f), n);
-    const h = (ITEM_H[it.key] ?? 10) * ITEM_SCALE, fw = f.w * ITEM_SCALE;
+    const h = itemHeight(it.key), fw = f.w * ITEM_SCALE;
     this.hits.push({ kind: 'item', id: it.uid, x: it.x! - fw / 2, y: y - h, w: fw, h: Math.max(h, 8) });
     if (this.editMode) {
       const c = this.ctx, f = { w: fw };
@@ -369,7 +373,7 @@ export class Scene {
       col = br.species === 'bird' ? 1 : 3;
     }
     const bed = a.action === 'sleep' && !a.perch ? assignBeds(g).get(p.id) : undefined;
-    if (bed && bed.x !== null && Math.abs(bed.x - a.x) < 3) feet = LANE_Y[bed.lane] - (bed.key === 'condo' ? 24 : bed.key === 'cage' ? 19 : bed.key === 'coolmat' ? 2 : 6);
+    if (bed && bed.x !== null && Math.abs(bed.x - a.x) < 3) feet = LANE_Y[bed.lane] - itemHeight(bed.key) * ({ bed: 0.35, coolmat: 0.3, condo: 0.86, cage: 0.3 }[bed.key] ?? 0.3);
     if (a.jump === 0) switch (a.action) {
       case 'walk':
         col = br.species === 'bird' ? 2 : 1 + (step % 2);
