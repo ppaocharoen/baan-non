@@ -1,0 +1,20 @@
+{
+  "name": "baan-non",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run validate && tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "validate": "tsx tools/validate.ts",
+    "sim": "tsx tools/sim.ts",
+    "test": "tsx tools/test-engine.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.6",
+    "tsx": "^4.20.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}

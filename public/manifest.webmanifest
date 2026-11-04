@@ -1,0 +1,17 @@
+{
+  "name": "บ้านน้อน · Baan Non: Klong Life",
+  "short_name": "บ้านน้อน",
+  "description": "เกมเลี้ยงน้องหมา แมว นก ในเรือนไทยริมคลอง",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4e2be",
+  "theme_color": "#f4e2be",
+  "lang": "th",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,14 @@
+:root {
+  --bg: #f4e2be;
+  --ink: #4a2f1c;
+  --accent: #c8663b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: 'Sarabun', sans-serif; }
+.app { max-width: 520px; margin: 0 auto; padding: env(safe-area-inset-top) 8px 16px; }
+.title { text-align: center; margin: 12px 0 8px; }
+.title h1 { font-family: 'Itim', cursive; font-size: 30px; margin: 0; color: var(--accent); }
+.title p { margin: 0; font-size: 14px; opacity: 0.75; }
+.stage { border-radius: 10px; overflow: hidden; border: 3px solid var(--ink); }
+#scene { display: block; width: 100%; aspect-ratio: 240 / 168; image-rendering: pixelated; }
+.note { text-align: center; font-size: 13px; opacity: 0.7; margin-top: 10px; }
