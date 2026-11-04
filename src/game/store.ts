@@ -21,7 +21,7 @@ export function loadGame(): GameState | null {
 }
 /** แปลงเซฟเก่าให้เป็นเวอร์ชันปัจจุบัน ทีละขั้น */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function migrate(g: any): GameState | null {
+export function migrate(g: any): GameState | null {
   if (!g || typeof g.v !== 'number') return null;
   if (g.v === 1) { // v1 → v2: เพิ่มสมุดสุขภาพ · ป่วยแบบไม่ระบุโรค → โรคผิวหนัง
     for (const p of g.pets ?? []) {
@@ -41,6 +41,12 @@ function migrate(g: any): GameState | null {
     g.social ??= newSocial();
     g.money = (g.money ?? 0) + 150;
     g.v = 4;
+  }
+  if (g.v === 4) { // v4 → v5: ฉากในบ้าน — ของ อึ น้อง มีห้อง
+    for (const p of g.pets ?? []) p.room ??= 'terrace';
+    for (const i of g.items ?? []) i.room ??= 'terrace';
+    for (const po of g.poops ?? []) po.room ??= 'terrace';
+    g.v = 5;
   }
   return g as GameState;
 }
@@ -64,3 +70,5 @@ export function savePhoto(id: number, url: string, keep: number[]) {
   out[id] = url;
   set(PHOTO_KEY, JSON.stringify(out));
 }
+export const allPhotos = () => photos();
+export function replacePhotos(p: Record<string, string>) { set(PHOTO_KEY, JSON.stringify(p)); }

@@ -26,11 +26,16 @@ export const SHOP = shopJson as { furniture: Furniture[]; supplies: Supply[] };
 export const furnitureOf = (k: string) => SHOP.furniture.find(f => f.key === k)!;
 export const supplyOf = (k: string) => SHOP.supplies.find(s => s.key === k)!;
 
-export interface HomeItem { uid: number; key: string; /** null = เก็บอยู่ในคลัง */ x: number | null; lane: 0 | 1; fill: number; }
-export interface Poop { id: number; x: number; day: number; petId: number; small: boolean; }
+export interface HomeItem { uid: number; key: string; /** null = เก็บอยู่ในคลัง */ x: number | null; lane: 0 | 1; fill: number; room: RoomKey; }
+export interface Poop { id: number; x: number; day: number; petId: number; small: boolean; room: RoomKey; }
 
-/** แนวพื้นที่เดินได้ (พิกัดโลก) ตามภาพฉากชานบ้าน: ระหว่างผนังซ้ายกับกระถาง/โอ่งขวา */
-export const FLOOR: [number, number] = [40, 208];
+/** ห้อง/ฉาก: ชานบ้านริมคลอง · ในบ้าน */
+export type RoomKey = 'terrace' | 'room';
+export const ROOM_KEYS: RoomKey[] = ['terrace', 'room'];
+/** แนวพื้นที่เดินได้ของแต่ละฉาก (พิกัดโลก) ตามภาพ: ชานบ้าน = ระหว่างผนังซ้ายกับกระถาง/โอ่ง · ในบ้าน = ระหว่างกระถางซ้ายกับตู้ทีวี */
+export const FLOORS: Record<RoomKey, [number, number]> = { terrace: [40, 208], room: [32, 175] };
+/** ชานบ้าน (เดิม) — คงไว้ให้โค้ดเก่า */
+export const FLOOR = FLOORS.terrace;
 export const POOP_CAP = 4;            // อึบนพื้นสะสมได้สูงสุด (กันกลับมาเจอบ้านพัง)
 export const HYGIENE = {
   cleanMultPerPoop: 0.2,              // ความสกปรกเพิ่มเร็วขึ้นต่ออึ 1 กอง
@@ -64,17 +69,18 @@ export function assignBeds(g: GameState): Map<number, HomeItem> {
 
 /** ห้องน้ำที่น้องใช้ได้ตอนนี้ (ยังไม่เต็ม) */
 export function toiletFor(g: GameState, p: Pet): HomeItem | undefined {
-  return placed(g).find(i => {
+  const ok = placed(g).filter(i => {
     const f = furnitureOf(i.key), cap = f.kind === 'toilet' ? f.cap : f.toilet;
     return cap !== undefined && fits(f, p) && i.fill < cap;
   });
+  return ok.find(i => i.room === p.room) ?? ok[0]; // ห้องเดียวกันก่อน
 }
 export const hasToy = (g: GameState, p: Pet) => placed(g).some(i => { const f = furnitureOf(i.key); return (f.kind === 'toy' || f.toy) && fits(f, p); });
 export const toiletCap = (f: Furniture) => (f.kind === 'toilet' ? f.cap : f.toilet) ?? 0;
 
 // ---------------- เวลาเดิน ----------------
 
-export type PoopEvent = { type: 'poop'; petId: number; x: number; toilet: number | null };
+export type PoopEvent = { type: 'poop'; petId: number; x: number; room: RoomKey; toilet: number | null };
 
 /** ตั้งเวลาขับถ่ายหลังกิน (ถ้ายังไม่มีค้าง) */
 export function digest(g: GameState, p: Pet) {
@@ -92,11 +98,11 @@ export function stepHome(g: GameState, p: Pet, dt: number, needsMult: number): P
   p.poopIn = -1;
   const t = toiletFor(g, p), stage = petStage(p, g.day);
   const useChance = (stage === 0 ? 0.5 : 0.8) + (stage === 0 ? 0.5 : 0.2) * p.trained;
-  if (t && nextRandom(g) < useChance) { t.fill++; return { type: 'poop', petId: p.id, x: t.x!, toilet: t.uid }; }
+  if (t && nextRandom(g) < useChance) { t.fill++; return { type: 'poop', petId: p.id, x: t.x!, room: t.room, toilet: t.uid }; }
   if (floorMess(g) >= POOP_CAP) return null;
-  const x = FLOOR[0] + nextRandom(g) * (FLOOR[1] - FLOOR[0]);
-  g.poops.push({ id: g.nextUid++, x, day: g.day, petId: p.id, small: speciesOf(p) === 'bird' });
-  return { type: 'poop', petId: p.id, x, toilet: null };
+  const fl = FLOORS[p.room], x = fl[0] + nextRandom(g) * (fl[1] - fl[0]);
+  g.poops.push({ id: g.nextUid++, x, day: g.day, petId: p.id, small: speciesOf(p) === 'bird', room: p.room });
+  return { type: 'poop', petId: p.id, x, room: p.room, toilet: null };
 }
 
 // ---------------- คำสั่ง ----------------
@@ -107,7 +113,7 @@ export function buyFurniture(g: GameState, key: string): Result & { item?: HomeI
   if (!f) return fail('ไม่มีของนี้');
   if (g.money < f.price) return fail('เงินไม่พอ');
   g.money -= f.price;
-  const item: HomeItem = { uid: g.nextUid++, key, x: null, lane: 0, fill: 0 };
+  const item: HomeItem = { uid: g.nextUid++, key, x: null, lane: 0, fill: 0, room: 'terrace' };
   g.items.push(item);
   return { ok: true, item };
 }
@@ -119,10 +125,12 @@ export function buySupply(g: GameState, key: string): Result {
   g.supplies[key] = (g.supplies[key] ?? 0) + s.uses;
   return { ok: true };
 }
-export function placeItem(g: GameState, uid: number, x: number, lane: 0 | 1 = 0): Result {
+export function placeItem(g: GameState, uid: number, x: number, lane: 0 | 1 = 0, room?: RoomKey): Result {
   const it = g.items.find(i => i.uid === uid);
   if (!it) return fail('ไม่พบของ');
-  it.x = Math.max(FLOOR[0], Math.min(FLOOR[1], x)); it.lane = lane;
+  if (room) it.room = room;
+  const fl = FLOORS[it.room];
+  it.x = Math.max(fl[0], Math.min(fl[1], x)); it.lane = lane;
   return { ok: true };
 }
 export function storeItem(g: GameState, uid: number): Result {

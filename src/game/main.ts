@@ -10,7 +10,8 @@ import { careFor, careState, diseaseOf, dueItems, HEALTH, vaccineState, vaccines
 import { isPostVax, isSick, mood, petAge, petStage, type Pet } from '../engine/pet';
 import { calendar, nightness, SEASONS } from '../engine/time';
 import { Scene } from './scene';
-import { clearGame, loadGame, loadSettings, photoUrl, saveGame, savePhoto, saveSettings } from './store';
+import { allPhotos, clearGame, loadGame, loadSettings, migrate, photoUrl, replacePhotos, saveGame, savePhoto, saveSettings, type Settings } from './store';
+import { makeBackupFile, makeSaveCode, readBackupFile, readSaveCode } from './transfer';
 import { addPhoto, freshness, hourFactor, post, postsLeft, SOCIAL, TIER_TH } from '../engine/social';
 import { applyTheme, THEMES } from './themes';
 import { runTraining } from './train';
@@ -60,6 +61,7 @@ const scene = new Scene($<HTMLCanvasElement>('scene'), {
   onTapPoop: id => { if (g && cleanPoop(g, id).ok) { sfx.sweep(); toast('เก็บกวาดแล้ว ✨', 1200); } },
   onTapItem: uid => (scene.editMode ? itemMenu(uid) : useItem(uid)),
   onMoveItem: (uid, x, lane) => { if (g) placeItem(g, uid, x, lane); },
+  onRoomChange: room => { $('room-btn').textContent = room === 'terrace' ? '🏠 เข้าบ้าน' : '🌴 ออกชาน'; },
 });
 document.querySelectorAll<HTMLCanvasElement>('canvas[data-thumb]').forEach(cv => itemThumb(cv, cv.dataset.thumb!));
 
@@ -262,12 +264,16 @@ function menu() {
     <button class="opt" id="m-adopt" ${g.pets.length >= B.maxPets ? 'disabled' : ''}><span>รับน้องเพิ่ม<br><small>${g.pets.length >= B.maxPets ? `บ้านนี้เลี้ยงได้ ${B.maxPets} ตัว` : `ค่ารับเลี้ยง ${B.adoptPrice}${COIN}`}</small></span>›</button>
     <button class="opt" id="m-heaven"><span>สวนสวรรค์สัตว์เลี้ยง<br><small>${g.heaven.length} ตัว</small></span>›</button>
     <button class="opt" id="m-info"><span>เกี่ยวกับเกม<br><small>โหมด${g.mode === 'hard' ? 'เข้ม' : 'ปกติ'}</small></span>›</button>
+    <button class="opt" id="m-move"><span>ย้ายเครื่อง / สำรองเซฟ</span>›</button>
+    <button class="opt" id="m-home"><span>เพิ่มไปหน้าจอโฮม</span>›</button>
     <button class="opt" id="m-code"><span>ใส่รหัส</span>›</button>
     <button class="opt" id="m-reset"><span>เริ่มเกมใหม่</span>›</button>
     <button class="ver" id="m-ver">v${VERSION} · ดูสิ่งที่เปลี่ยน</button>`);
   s.querySelector('#m-ver')!.addEventListener('click', changelog);
   s.querySelector('#m-theme')!.addEventListener('click', themePicker);
   s.querySelector('#m-code')!.addEventListener('click', codePrompt);
+  s.querySelector('#m-move')!.addEventListener('click', transferMenu);
+  s.querySelector('#m-home')!.addEventListener('click', homeScreenHelp);
   s.querySelector('#m-sound')!.addEventListener('click', e => {
     settings.sound = !settings.sound; sfx.enabled = settings.sound; saveSettings(settings);
     (e.currentTarget as HTMLElement).lastElementChild!.textContent = settings.sound ? 'เปิด' : 'ปิด';
@@ -287,6 +293,77 @@ function menu() {
     c.querySelector('#yes')!.addEventListener('click', () => { clearGame(); g = null; selId = null; welcome(); });
   });
 }
+// ---------- ย้ายเครื่อง ----------
+function transferMenu() {
+  if (!g) return;
+  const s = openPop(`${head('ย้ายเครื่อง / สำรองเซฟ')}
+    <p class="sec">รหัสเซฟ</p><p><small>คัดลอกรหัสไปวางในเกมอีกเครื่อง (ไม่รวมรูปในอัลบั้ม)</small></p>
+    <div class="btnrow"><button class="cta" id="mk">สร้างรหัสเซฟ</button><button class="cta ghost" id="in">ใส่รหัสเซฟ</button></div>
+    <p class="sec">ไฟล์สำรอง</p><p><small>เก็บทุกอย่างรวมรูปในอัลบั้ม เป็นไฟล์ในเครื่อง</small></p>
+    <div class="btnrow"><button class="cta" id="dl">บันทึกไฟล์</button><label class="cta ghost" style="text-align:center">เปิดไฟล์<input type="file" id="up" accept=".json,application/json" hidden /></label></div>`, true);
+  s.querySelector('#mk')!.addEventListener('click', async () => {
+    const code = await makeSaveCode(g!);
+    const c = openPop(`${head('รหัสเซฟ')}<p><small>ยาว ${code.length.toLocaleString('th-TH')} ตัวอักษร · คัดลอกทั้งหมดแล้วไปวางในเกมอีกเครื่อง: เมนู → ย้ายเครื่อง → ใส่รหัสเซฟ</small></p>
+      <textarea id="code" readonly style="width:100%;height:120px;font-size:12px;word-break:break-all">${code}</textarea><button class="cta" id="cp">คัดลอก</button>`, true);
+    c.querySelector('#cp')!.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(code); toast('คัดลอกรหัสเซฟแล้ว'); }
+      catch { const t = c.querySelector<HTMLTextAreaElement>('#code')!; t.select(); document.execCommand('copy'); toast('คัดลอกแล้ว'); }
+    });
+  });
+  s.querySelector('#in')!.addEventListener('click', () => {
+    const c = openPop(`${head('ใส่รหัสเซฟ')}<p><small>เกมในเครื่องนี้จะถูกแทนที่ด้วยเซฟจากรหัส</small></p><textarea id="code" style="width:100%;height:120px;font-size:12px"></textarea><button class="cta" id="go">โหลดเซฟ</button>`, true);
+    c.querySelector('#go')!.addEventListener('click', async () => {
+      try { applyLoaded(await readSaveCode(c.querySelector<HTMLTextAreaElement>('#code')!.value)); }
+      catch (e) { toast(e instanceof Error && e.message.includes('บ้านน้อน') ? e.message : 'รหัสเซฟไม่ถูกต้อง', 3000); }
+    });
+  });
+  s.querySelector('#dl')!.addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(makeBackupFile(g!, settings, allPhotos()));
+    a.download = `baan-non-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('บันทึกไฟล์สำรองแล้ว');
+  });
+  s.querySelector<HTMLInputElement>('#up')!.addEventListener('change', async e => {
+    const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return;
+    try {
+      const b = await readBackupFile(f);
+      applyLoaded(b.game, () => {
+        if (b.photos) replacePhotos(b.photos);
+        if (b.settings) { Object.assign(settings, b.settings as Settings); saveSettings(settings); applyTheme(settings.theme); }
+      });
+    } catch (err) { toast(err instanceof Error ? err.message : 'เปิดไฟล์ไม่ได้', 3000); }
+  });
+}
+/** ยืนยันแล้วแทนที่เกมปัจจุบัน */
+function applyLoaded(raw: unknown, extra?: () => void) {
+  const ng = migrate(JSON.parse(JSON.stringify(raw)));
+  if (!ng) { toast('ข้อมูลเซฟเสียหรือเป็นเวอร์ชันที่ไม่รองรับ', 3000); return; }
+  const names = ng.pets.map(p => p.name).join(', ') || 'ไม่มีน้อง';
+  const c = openPop(`${head('โหลดเซฟนี้?')}<p>น้อง: ${names}<br>เงิน ${fmtMoney(ng.money)}${COIN} · ผู้ติดตาม ${fmtFans(ng.social?.followers ?? 0)}</p><p><small>เกมในเครื่องนี้จะหายไปและถูกแทนที่</small></p>
+    <button class="cta" id="yes">โหลดเซฟ</button><button class="cta ghost" id="no">ยกเลิก</button>`);
+  c.querySelector('#no')!.addEventListener('click', closePop);
+  c.querySelector('#yes')!.addEventListener('click', () => {
+    ng.lastReal = Date.now(); // ไม่คิดเวลาที่ผ่านไประหว่างย้ายเครื่อง
+    g = ng; // ตอนปิดหน้าเกมจะเซฟตัวนี้ (ไม่ทับด้วยเกมเก่า)
+    saveGame(ng); extra?.();
+    location.reload();
+  });
+}
+function homeScreenHelp() {
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  openPop(`${head('เพิ่มไปหน้าจอโฮม')}
+    ${ios ? `<p><b>iPhone / iPad (Safari)</b></p><div class="row"><span>1. กดปุ่มแชร์ ⬆︎ ด้านล่างจอ</span></div><div class="row"><span>2. เลื่อนหา "เพิ่มไปยังหน้าจอโฮม"</span></div><div class="row"><span>3. กด "เพิ่ม" จะได้ไอคอนอุ้งเท้าบ้าน</span></div>`
+      : `<p><b>Android (Chrome)</b></p><div class="row"><span>1. กดเมนู ⋮ มุมขวาบน</span></div><div class="row"><span>2. เลือก "ติดตั้งแอป" หรือ "เพิ่มลงในหน้าจอหลัก"</span></div>`}
+    <p><small>⚠ บน iPhone เกมที่เปิดจากหน้าจอโฮมเก็บเซฟแยกจาก Safari · ถ้าเล่นใน Safari มาก่อน ให้สร้างรหัสเซฟที่ เมนู → ย้ายเครื่อง ก่อน แล้วไปวางในเกมที่เปิดจากหน้าจอโฮม</small></p>
+    ${deferredInstall ? '<button class="cta" id="inst">ติดตั้งเลย</button>' : ''}`);
+  sheet.querySelector('#inst')?.addEventListener('click', async () => { await deferredInstall?.prompt(); deferredInstall = null; closePop(); });
+}
+let deferredInstall: (Event & { prompt(): Promise<void> }) | null = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e as typeof deferredInstall; });
+// ทำงานแบบออฟไลน์ได้หลังเปิดครั้งแรก (จำเป็นสำหรับแอปบนหน้าจอโฮม)
+if ('serviceWorker' in navigator && import.meta.env.PROD) navigator.serviceWorker.register('./sw.js').catch(() => { /* ไม่มีก็เล่นได้ */ });
+
 function codePrompt() {
   const s = openPop(`${head('ใส่รหัส')}<p>รหัสทดสอบหรือรหัสปลดล็อกของพิเศษ</p><input id="code" autocomplete="off" autocapitalize="characters" /><button class="cta" id="go">ตกลง</button>`);
   const inp = s.querySelector<HTMLInputElement>('#code')!;
@@ -334,6 +411,7 @@ const cycle = (d: number) => {
   const i = g.pets.findIndex(p => p.id === selId);
   select(g.pets[(i + d + g.pets.length) % g.pets.length].id);
 };
+$('room-btn').addEventListener('click', () => { sfx.click(); scene.showRoom(scene.viewRoom === 'terrace' ? 'room' : 'terrace'); });
 $('prev').addEventListener('click', () => cycle(-1));
 $('next').addEventListener('click', () => cycle(1));
 $('chip-time').addEventListener('click', () => { if (!g) return; const c = calendar(g.day); toast(`ปีที่ ${c.year} · ฤดู${SEASONS[c.season]} วันที่ ${c.dayOfSeason}/${B.daysPerSeason}`); });
@@ -357,7 +435,7 @@ function shop() {
     const r = buyFurniture(g!, el.dataset.buy!);
     if (!r.ok) { toast(r.reason!); return; }
     sfx.buy(); closePop();
-    placeItem(g!, r.item!.uid, scene.viewCenter, 0);
+    placeItem(g!, r.item!.uid, scene.viewCenter, 0, scene.viewRoom);
     scene.highlight = r.item!.uid;
     setEdit(true);
     toast(`ได้${furnitureOf(r.item!.key).name}แล้ว ลากไปวางตรงที่ชอบ`, 3000);
@@ -382,7 +460,7 @@ function storedList() {
   const s = openPop(`${head('ของในคลัง')}${stored.length ? stored.map(i => `<div class="shop-row"><canvas data-k="${i.key}"></canvas><span>${furnitureOf(i.key).name}</span><button class="cta mini" data-place="${i.uid}">วาง</button></div>`).join('') : '<p>ไม่มีของเก็บไว้ · ซื้อเพิ่มได้ที่ร้าน</p>'}`);
   s.querySelectorAll<HTMLCanvasElement>('canvas[data-k]').forEach(cv => itemThumb(cv, cv.dataset.k!));
   s.querySelectorAll<HTMLElement>('[data-place]').forEach(el => el.addEventListener('click', () => {
-    const uid = Number(el.dataset.place); placeItem(g!, uid, scene.viewCenter, 0); scene.highlight = uid; closePop();
+    const uid = Number(el.dataset.place); placeItem(g!, uid, scene.viewCenter, 0, scene.viewRoom); scene.highlight = uid; closePop();
   }));
 }
 function itemMenu(uid: number) {
@@ -444,12 +522,13 @@ function momentWatch(dt: number) {
   watchT = 12 + Math.random() * 10;
   const home = g.pets.filter(p => p.status === 'home');
   const st = home.map(p => ({ p, s: scene.actorState(p.id) })).filter(x => x.s);
-  const rail = st.find(x => x.s!.perch === 2 && !x.s!.jumping);
-  const bench = st.find(x => x.s!.perch === 1 && !x.s!.jumping);
-  const sleep = st.find(x => x.s!.action === 'sleep');
-  if (st.length >= 2 && Math.abs(st[0].s!.x - st[1].s!.x) < 18) offerMoment('สองตัวอยู่ด้วยกัน', 1, [st[0].p.id, st[1].p.id]);
-  else if (rail) offerMoment('เดินบนราวระเบียง', 1, [rail.p.id]);
-  else if (bench) offerMoment('นั่งบนม้านั่ง', 0, [bench.p.id]);
+  const seen = st.filter(x => x.s!.inView);
+  const high = seen.find(x => x.s!.perch === 2 && !x.s!.jumping);
+  const mid = seen.find(x => x.s!.perch === 1 && !x.s!.jumping);
+  const sleep = seen.find(x => x.s!.action === 'sleep');
+  if (seen.length >= 2 && Math.abs(seen[0].s!.x - seen[1].s!.x) < 18) offerMoment('สองตัวอยู่ด้วยกัน', 1, [seen[0].p.id, seen[1].p.id]);
+  else if (high) offerMoment(high.s!.perchLabel, 1, [high.p.id]);
+  else if (mid) offerMoment(mid.s!.perchLabel, 0, [mid.p.id]);
   else if (sleep) offerMoment(nightness(g.day) > 0.5 ? 'นอนหลับฝันดี' : 'งีบกลางวัน', 0, [sleep.p.id]);
 }
 
@@ -492,7 +571,7 @@ function photoDetail(id: number) {
 function handle(events: GameEvent[]) {
   for (const e of events) {
     if (e.type === 'newDay') continue;
-    if (e.type === 'poop') { scene.goPoop(e.petId, e.x); setTimeout(() => sfx.plop(), 900); continue; }
+    if (e.type === 'poop') { scene.goPoop(e.petId, e.x, e.room); setTimeout(() => sfx.plop(), 900); continue; }
     const name = nameOf(e.petId);
     const pet = g ? petById(g, e.petId) : undefined;
     if (e.type === 'sick') { toast(`${name} ไม่สบาย (${diseaseOf(e.disease).symptom}) พาไปคลินิกนะ`, 4500); sfx.alert(); if (pet) voice(pet, 'sad', 350); }
@@ -562,6 +641,7 @@ function renderHud() {
     }
     banner.classList.add('on');
   } else { banner.classList.remove('on'); delete banner.dataset.away; }
+  $('room-btn').hidden = banner.classList.contains('on') || scene.editMode;
 }
 
 // ---------- ลูปหลัก ----------

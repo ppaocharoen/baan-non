@@ -2,6 +2,7 @@
 import { BALANCE as B } from './balance';
 import { breedOf } from './content';
 import type { HealthState } from './health';
+import type { RoomKey } from './home';
 
 export type PetStatus = 'home' | 'away';
 
@@ -14,6 +15,8 @@ export interface Pet {
   /** อายุขัย (วัน) สุ่มไว้ตอนได้มา */
   lifespan: number;
   status: PetStatus;
+  /** อยู่ห้องไหน (ฉากเป็นคนย้าย เมื่อน้องเดินผ่านประตู) */
+  room: RoomKey;
   full: number;     // อิ่ม 0–1
   clean: number;    // สะอาด 0–1
   bond: number;     // ผูกพัน 0–1

@@ -134,3 +134,5 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .stats small { font-size: 12px; opacity: .75; }
 .comment { background: color-mix(in srgb, var(--lcd-ink) 10%, transparent); border-radius: 10px; padding: 6px 10px; margin: 4px 0; font-size: 14px; }
 .btnrow { display: flex; gap: 6px; } .btnrow .cta { flex: 1; }
+.roombtn { position: absolute; left: 8px; bottom: 8px; background: color-mix(in srgb, var(--lcd) 88%, transparent); border: 2px solid var(--lcd-ink); color: var(--lcd-ink);
+  border-radius: 999px; padding: 3px 10px; font-size: 13px; }

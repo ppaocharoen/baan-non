@@ -9,7 +9,7 @@ import { digest, floorMess, hasToy, HYGIENE, stepHome, useSupply, type HomeItem,
 import { newSocial, passiveIncome, type SocialState } from './social';
 import { decayPet, isPostVax, isSick, petAge, petStage, type Grave, type Pet } from './pet';
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 export interface GameState {
   v: number;
@@ -131,7 +131,7 @@ export function adopt(g: GameState, breedKey: string, name: string, price = 0): 
   g.money -= price;
   const lifespan = br.life[0] + Math.floor(nextRandom(g) * (br.life[1] - br.life[0] + 1));
   const pet: Pet = {
-    id: g.nextId++, breed: br.key, name, born: g.day, lifespan, status: 'home',
+    id: g.nextId++, breed: br.key, name, born: g.day, lifespan, status: 'home', room: 'terrace',
     full: 0.8, clean: 0.8, bond: 0.1, trained: 0, health: newHealth(), sickDays: 0,
     hungryDays: 0, dirtyDays: 0, starveDays: 0, lastFoodSick: 1,
     fedBondDay: -1, bathBondDay: -1, playDay: -1, playsToday: 0, lastTrain: -1e9, poopIn: -1, shampooUntil: -1,
