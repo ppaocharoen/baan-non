@@ -1,5 +1,6 @@
 // เนื้อหาเกมจาก data/*.json — ทั้งเกมและ tools (sim/validate) อ่านผ่านไฟล์นี้
 import breedsJson from '../../data/breeds.json';
+import foodsJson from '../../data/foods.json';
 
 export type Species = 'dog' | 'cat' | 'bird';
 
@@ -23,4 +24,22 @@ export const breedOf = (k: string): Breed => {
   const b = BREEDS.find(x => x.key === k);
   if (!b) throw new Error(`ไม่รู้จักสายพันธุ์ ${k}`);
   return b;
+};
+
+export interface Food {
+  key: string;
+  name: string;
+  price: number;
+  /** ตัวคูณความผูกพันที่ได้ตอนให้อาหาร */
+  bondMult: number;
+  /** ตัวคูณโอกาสป่วย (ยิ่งต่ำยิ่งป่วยยาก) */
+  sickMult: number;
+  /** ช่องในชีต items.png */
+  icon: number;
+}
+export const FOODS = foodsJson as Food[];
+export const foodOf = (k: string): Food => {
+  const f = FOODS.find(x => x.key === k);
+  if (!f) throw new Error(`ไม่รู้จักอาหาร ${k}`);
+  return f;
 };

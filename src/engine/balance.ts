@@ -1,5 +1,7 @@
 // ค่าสมดุลทั้งหมดของเกมอยู่ที่นี่ที่เดียว — แก้ตัวเลขแล้วรัน `npm run sim` เพื่อดูว่ายังผ่านเป้าหมายไหม
-// ตัวเลขตั้งต้นมาจาก claude/pet-game-design.md ในโปรเจกต์
+// ตัวเลขตั้งต้นมาจาก pet-game-design.md ในโปรเจกต์ · หน่วยเวลาทั้งหมดเป็น "วันในเกม" ยกเว้นที่ระบุ
+
+export type Mode = 'normal' | 'hard';
 
 export const BALANCE = {
   // ---- เวลา ----
@@ -9,6 +11,61 @@ export const BALANCE = {
   offlineSpeed: 0.05,
   /** ตอนปิดเกม เวลาเดินได้สูงสุดกี่วันในเกม */
   offlineMaxDays: 60,
+  /** ความละเอียดการคำนวณ (วัน) — ก้าวละไม่เกินนี้ */
+  stepDays: 0.05,
   daysPerSeason: 28,
   seasonsPerYear: 4,
+  /** เกมใหม่เริ่มตอน 7 โมงเช้า */
+  startDay: 7 / 24,
+
+  // ---- ค่าที่ลดลงตามเวลา (ต่อวัน) ----
+  fullDecay: 0.04,
+  cleanDecay: 0.03,
+  hungryBelow: 0.15,
+  dirtyBelow: 0.2,
+
+  // ---- ความผูกพัน (ต่อวัน หรือต่อครั้ง) ----
+  bondTogether: 0.0008,
+  bondHungry: -0.004,
+  bondDirty: -0.002,
+  bondSick: -0.003,
+  bondFeed: 0.03,     // ×bondMult ของอาหาร · นับวันละครั้ง
+  bondBathe: 0.02,    // นับวันละครั้ง
+  bondPlay: 0.02,
+  playsPerDay: 3,
+
+  // ---- ฝึก ----
+  trainCooldown: 7,
+  trainGain: 0.12,    // × (แตะโดน/5)
+  trainTaps: 5,
+
+  // ---- ป่วย ----
+  /** หิวหรือสกปรกติดต่อกันเกินกี่วันถึงเริ่มเสี่ยงป่วย */
+  riskAfterDays: 3,
+  /** โอกาสป่วยต่อวัน เมื่อเข้าเงื่อนไขเสี่ยง (× sickMult ของอาหารมื้อล่าสุด) */
+  sickChancePerDay: 0.15,
+
+  // ---- ถูกละเลยนานมาก ----
+  /** หิวจนอิ่มเป็น 0 ติดต่อกันเกินกี่วัน */
+  starveLimit: 10,
+  /** ป่วยแล้วไม่รักษาเกินกี่วัน */
+  sickLimit: 14,
+
+  // ---- กลับมาจากบ้านป้า ----
+  coaxBondMult: 0.5,
+  coaxFull: 0.6,
+  coaxClean: 0.6,
+
+  // ---- เงิน (ชั่วคราว จนกว่าจะมีช่องโซเชียลในขั้น 5) ----
+  startMoney: 300,
+  treatCost: 120,
+  coaxCost: 60,
+  maxPets: 2,
+
+  modes: {
+    /** ละเลยนานมาก: หนีไปบ้านป้า (ตามกลับได้) */
+    normal: { neglect: 'runaway' as const },
+    /** ละเลยนานมาก: ตาย */
+    hard: { neglect: 'die' as const },
+  } satisfies Record<Mode, { neglect: 'runaway' | 'die' }>,
 } as const;
