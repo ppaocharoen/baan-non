@@ -3,6 +3,7 @@ import { breedOf, foodOf, type Breed } from '../engine/content';
 import type { GameState } from '../engine/core';
 import { isPostVax, isSick, petStage, type Pet } from '../engine/pet';
 import { nightness } from '../engine/time';
+import { Ambient } from './ambient';
 
 /** ความสูงโลก (พิกเซลเกม) — ความกว้างโลกตามสัดส่วนภาพฉาก */
 const WORLD_H = 168;
@@ -36,6 +37,7 @@ export class Scene {
   camX = 0;
   private manualUntil = 0;
   private t = 0;
+  private ambient = new Ambient();
   focusId: number | null = null;
   private boxes = new Map<number, { x: number; y: number; w: number; h: number }>();
 
@@ -162,6 +164,7 @@ export class Scene {
     const bg = this.bgDay;
     if (ready(bg)) this.worldW = (bg.naturalWidth * WORLD_H) / bg.naturalHeight;
     this.sync(g);
+    this.ambient.update(dt, nightness(g.day));
     for (const p of g.pets) {
       const a = this.actors.get(p.id);
       if (!a) continue;
@@ -199,10 +202,13 @@ export class Scene {
     };
     drawBg(this.bgDay, 1);
     drawBg(this.bgNight, n);
+    const s = ready(this.bgDay) ? WORLD_H / this.bgDay.naturalHeight : 0.52;
+    this.ambient.drawBack(c, { camX: this.camX, s, rx: this.rx, day: this.bgDay, night: this.bgNight, n, ready });
 
     this.boxes.clear();
     const order = g.pets.filter(p => this.actors.has(p.id)).sort((a, b) => this.actors.get(a.id)!.x - this.actors.get(b.id)!.x);
     for (const p of order) this.drawPet(p, this.actors.get(p.id)!, g);
+    this.ambient.drawFront(c, { camX: this.camX, s, rx: this.rx, n });
   }
 
   private drawPet(p: Pet, a: Actor, g: GameState) {
