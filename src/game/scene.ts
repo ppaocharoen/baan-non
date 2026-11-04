@@ -15,16 +15,22 @@ const GROUND = 142;
 const FLOOR_L = 18, FLOOR_R_PAD = 18;
 /** แนวเท้าของแถวของ: 0 = แถวหลัง (ชิดราว) · 1 = แถวหน้า */
 const LANE_Y = [GROUND + 2, GROUND + 16];
-/** ม้านั่งกลางฉาก (พิกัดโลก): ขึ้นไปนั่ง/นอนได้ */
-const BENCH = { x0: 89, x1: 130, y: 108 };
+/** ที่ที่น้องขึ้นไปอยู่ได้ (พิกัดโลก): 0 พื้น · 1 ม้านั่งกลางฉาก · 2 ราวระเบียง (เฉพาะแมวกับนก) */
+const PERCH = [
+  { x0: FLOOR_L, x1: 1e9, y: GROUND + 4 },
+  { x0: 89, x1: 130, y: 108 },
+  { x0: 72, x1: 162, y: 90 },
+];
+const inPerch = (k: number, x: number) => x >= PERCH[k].x0 + 2 && x <= PERCH[k].x1 - 2;
+const clampPerch = (k: number, x: number) => Math.max(PERCH[k].x0 + 3, Math.min(PERCH[k].x1 - 3, x));
 
 type Action = 'idle' | 'walk' | 'eat' | 'happy' | 'sleep' | 'squat';
-interface Plan { x: number; action: Action; dur: number; bench?: boolean; food?: string; }
+interface Plan { x: number; action: Action; dur: number; perch?: number; food?: string; }
 interface Actor {
   id: number; x: number; face: 1 | -1; target: number;
   action: Action; until: number; walkT: number; nextThink: number; food: string;
-  /** อยู่บนม้านั่งไหม · กำลังกระโดด (0–1) และกระโดดขึ้นหรือลง */
-  onBench: boolean; jump: number; jumpUp: boolean;
+  /** อยู่ที่ไหน (PERCH) · กำลังกระโดด (0–1) จากที่ไหนไปที่ไหน */
+  perch: number; jump: number; jumpFrom: number; jumpTo: number;
   plan: Plan | null;
   /** ที่นอนที่ไปนอนอยู่ */
   bedY: number | null;
@@ -175,7 +181,7 @@ export class Scene {
     const p = g.pets.find(x => x.id === id);
     const target = p && (action === 'eat' ? this.itemOf('bowl', p, g) : Math.random() < 0.6 ? this.itemOf('toy', p, g) : undefined);
     if (target && target.x !== null) { this.go(a, { x: target.x + (a.x < target.x ? -10 : 10), action, dur: action === 'eat' ? 3 : 2.2, food }); return; }
-    if (a.onBench && action === 'eat') { this.go(a, { x: a.x, action, dur: 3, food }); return; }
+    if (a.perch && action === 'eat') { this.go(a, { x: a.x, action, dur: 3, food, perch: a.perch }); return; }
     a.action = action; a.until = this.t + (action === 'eat' ? 3 : 2.2); a.food = food; a.plan = null;
   }
   /** น้องไปขับถ่ายที่ x */
@@ -185,11 +191,16 @@ export class Scene {
   }
   private go(a: Actor, plan: Plan) {
     a.plan = plan;
-    a.target = plan.x;
-    if (a.onBench && !plan.bench) this.startJump(a, false);
-    else if (!a.onBench || Math.abs(a.x - plan.x) > 0.5) a.action = 'walk';
+    const tp = plan.perch ?? 0;
+    if (a.perch && a.perch !== tp) {
+      // ออกจากที่สูง: กระโดดตรงไปที่หมายถ้าอยู่ในแนวเดียวกัน ไม่งั้นลงพื้นก่อน
+      this.startJump(a, tp && inPerch(tp, a.x) ? tp : 0);
+      return;
+    }
+    a.target = a.perch ? clampPerch(a.perch, plan.x) : plan.x;
+    a.action = 'walk';
   }
-  private startJump(a: Actor, up: boolean) { a.jump = 0.0001; a.jumpUp = up; a.action = 'idle'; }
+  private startJump(a: Actor, to: number) { a.jump = 0.0001; a.jumpFrom = a.perch; a.jumpTo = to; a.action = 'idle'; }
 
   screenPos(id: number): { x: number; y: number } | null {
     const h = this.hits.find(x => x.kind === 'pet' && x.id === id);
@@ -208,7 +219,7 @@ export class Scene {
         const cands = [0.25, 0.4, 0.55, 0.7].map(f => this.camX + this.viewW * f);
         const dist = (v: number) => Math.min(Infinity, ...others.map(o => Math.abs(o - v)));
         const x = cands.reduce((best, c) => (dist(c) > dist(best) ? c : best), cands[1]);
-        this.actors.set(id, { id, x, face: 1, target: x, action: 'idle', until: 0, walkT: 0, nextThink: this.t + 1, food: 'rice', onBench: false, jump: 0, jumpUp: true, plan: null, bedY: null });
+        this.actors.set(id, { id, x, face: 1, target: x, action: 'idle', until: 0, walkT: 0, nextThink: this.t + 1, food: 'rice', perch: 0, jump: 0, jumpFrom: 0, jumpTo: 0, plan: null, bedY: null });
       }
     }
   }
@@ -229,14 +240,16 @@ export class Scene {
     }
     a.bedY = null;
     if (lazy || Math.random() > 0.7) { a.action = 'idle'; return; }
-    // บางทีกระโดดขึ้นม้านั่ง (หรือลงมา)
-    if (canJump && Math.random() < 0.18) {
-      if (a.onBench) { this.go(a, { x: Math.max(FLOOR_L, Math.min(this.worldW - FLOOR_R_PAD, a.x + (Math.random() - 0.5) * 60)), action: 'idle', dur: 0 }); return; }
-      const bx = BENCH.x0 + 4 + Math.random() * (BENCH.x1 - BENCH.x0 - 8);
-      this.go(a, { x: bx, action: Math.random() < 0.4 ? 'sleep' : 'idle', dur: 6 + Math.random() * 8, bench: true });
+    // บางทีกระโดดขึ้นที่สูง (หรือลงมา): ม้านั่งได้ทุกตัว · ราวระเบียงเฉพาะแมวกับนก
+    const sp = breedOf(p.breed).species, climber = sp === 'cat' || sp === 'bird';
+    if (canJump && Math.random() < (climber ? 0.25 : 0.18)) {
+      if (a.perch) { this.go(a, { x: Math.max(FLOOR_L, Math.min(this.worldW - FLOOR_R_PAD, a.x + (Math.random() - 0.5) * 60)), action: 'idle', dur: 0 }); return; }
+      const k = climber && Math.random() < 0.55 ? 2 : 1;
+      const px = PERCH[k].x0 + 4 + Math.random() * (PERCH[k].x1 - PERCH[k].x0 - 8);
+      this.go(a, { x: px, action: Math.random() < 0.35 ? 'sleep' : 'idle', dur: 6 + Math.random() * 8, perch: k });
       return;
     }
-    if (a.onBench) { a.target = Math.max(BENCH.x0 + 3, Math.min(BENCH.x1 - 3, a.x + (Math.random() - 0.5) * 20)); a.action = 'walk'; return; }
+    if (a.perch) { a.target = clampPerch(a.perch, a.x + (Math.random() - 0.5) * (a.perch === 2 ? 40 : 20)); a.action = 'walk'; return; }
     a.target = Math.max(FLOOR_L, Math.min(this.worldW - FLOOR_R_PAD, a.x + (Math.random() - 0.5) * 120));
     a.action = 'walk';
   }
@@ -253,19 +266,20 @@ export class Scene {
       this.think(a, p, g);
       // กำลังกระโดดขึ้น/ลงม้านั่ง
       if (a.jump > 0) {
-        a.jump += dt / 0.45;
+        a.jump += dt / (Math.abs(PERCH[a.jumpFrom].y - PERCH[a.jumpTo].y) > 30 ? 0.6 : 0.45);
         if (a.jump >= 1) {
-          a.jump = 0; a.onBench = a.jumpUp;
-          if (a.plan) { a.target = a.plan.x; a.action = 'walk'; }
+          a.jump = 0; a.perch = a.jumpTo;
+          if (a.plan) { a.target = a.perch ? clampPerch(a.perch, a.plan.x) : a.plan.x; a.action = 'walk'; }
         }
         continue;
       }
       if (a.action === 'walk') {
-        const dx = a.target - a.x, speed = petStage(p, g.day) === 2 ? 12 : a.plan ? 26 : 20;
+        const dx = a.target - a.x, speed = petStage(p, g.day) === 2 ? 12 : a.perch === 2 ? 10 : a.plan ? 26 : 20;
         if (Math.abs(dx) < 1) {
           a.action = 'idle';
           if (a.plan) {
-            if (a.plan.bench && !a.onBench) { this.startJump(a, true); continue; }
+            const tp = a.plan.perch ?? 0;
+            if (a.perch !== tp) { this.startJump(a, tp); continue; }
             a.action = a.plan.action; a.until = this.t + a.plan.dur; a.food = a.plan.food ?? a.food;
             a.nextThink = a.until; a.plan = null;
           }
@@ -274,7 +288,7 @@ export class Scene {
         a.face = dx > 0 ? 1 : -1;
         a.x += Math.sign(dx) * Math.min(Math.abs(dx), speed * dt);
         a.walkT += dt;
-      } else if (a.plan && a.jump === 0 && !(a.onBench && !a.plan.bench)) { a.action = 'walk'; }
+      } else if (a.plan && a.jump === 0 && a.perch === (a.plan.perch ?? 0)) { a.action = 'walk'; }
     }
     const f = this.focusId !== null ? this.actors.get(this.focusId) : undefined;
     if (f && this.t > this.manualUntil && !this.editMode) {
@@ -305,8 +319,8 @@ export class Scene {
 
     this.hits = [];
     const pets = g.pets.filter(p => this.actors.has(p.id)).map(p => ({ p, a: this.actors.get(p.id)! }));
-    // ชั้นหลังสุด: น้องบนม้านั่ง
-    for (const { p, a } of pets.filter(x => x.a.onBench && x.a.jump === 0).sort((u, v) => u.a.x - v.a.x)) this.drawPet(p, a, g);
+    // ชั้นหลังสุด: น้องบนราวระเบียง แล้วบนม้านั่ง
+    for (const k of [2, 1]) for (const { p, a } of pets.filter(x => x.a.perch === k && x.a.jump === 0).sort((u, v) => u.a.x - v.a.x)) this.drawPet(p, a, g);
     // ของแถวหลัง
     for (const it of placed(g).filter(i => i.lane === 0)) this.drawHomeItem(it, n);
     // อึ
@@ -316,7 +330,7 @@ export class Scene {
       this.hits.push({ kind: 'poop', id: po.id, x: po.x - 7, y: y - 12, w: 14, h: 14 });
     }
     // น้องบนพื้น (และกำลังกระโดด)
-    for (const { p, a } of pets.filter(x => !x.a.onBench || x.a.jump > 0).sort((u, v) => u.a.x - v.a.x)) this.drawPet(p, a, g);
+    for (const { p, a } of pets.filter(x => x.a.perch === 0 || x.a.jump > 0).sort((u, v) => u.a.x - v.a.x)) this.drawPet(p, a, g);
     // ของแถวหน้า
     for (const it of placed(g).filter(i => i.lane === 1)) this.drawHomeItem(it, n);
     this.ambient.drawFront(c, { camX: this.camX, s, rx: this.rx, n });
@@ -348,13 +362,13 @@ export class Scene {
     let im = main, cols = 4, col = 0, scale = br.scale, lift = 0;
     const step = Math.floor(a.walkT / (stage === 2 ? 0.28 : 0.18));
     // เท้าอยู่ที่ไหน: พื้น ม้านั่ง หรือกลางอากาศตอนกระโดด
-    let feet = a.onBench ? BENCH.y : GROUND + 4;
+    let feet = PERCH[a.perch].y;
     if (a.jump > 0) {
-      const from = a.jumpUp ? GROUND + 4 : BENCH.y, to = a.jumpUp ? BENCH.y : GROUND + 4;
-      feet = from + (to - from) * a.jump - Math.sin(a.jump * Math.PI) * 14;
+      const from = PERCH[a.jumpFrom].y, to = PERCH[a.jumpTo].y;
+      feet = from + (to - from) * a.jump - Math.sin(a.jump * Math.PI) * (14 + Math.abs(from - to) * 0.2);
       col = br.species === 'bird' ? 1 : 3;
     }
-    const bed = a.action === 'sleep' && !a.onBench ? assignBeds(g).get(p.id) : undefined;
+    const bed = a.action === 'sleep' && !a.perch ? assignBeds(g).get(p.id) : undefined;
     if (bed && bed.x !== null && Math.abs(bed.x - a.x) < 3) feet = LANE_Y[bed.lane] - (bed.key === 'condo' ? 24 : bed.key === 'cage' ? 19 : bed.key === 'coolmat' ? 2 : 6);
     if (a.jump === 0) switch (a.action) {
       case 'walk':
