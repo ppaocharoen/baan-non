@@ -76,3 +76,9 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .dot.on { display: block; }
 
 @media (max-height: 640px) { .btns button { height: 48px; font-size: 12px; } .ic { transform: scale(.85); } }
+.cta.mini { display: inline-block; width: auto; margin: 0; padding: 4px 10px; font-size: 14px; white-space: nowrap; }
+.cta[disabled] { opacity: .45; }
+.alert { background: #FCEBEB; color: #791F1F; border: 2px solid #A32D2D; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-size: 14px; }
+.alert b { font-weight: 400; text-decoration: underline; }
+.alert .cta { background: #A32D2D; color: #FCEBEB; }
+.sheet p b { font-weight: 400; font-size: 16px; }

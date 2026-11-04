@@ -1,5 +1,6 @@
 // เก็บเซฟและการตั้งค่าใน localStorage (รหัสเซฟ/export มาในขั้น 6)
 import { SAVE_VERSION, type GameState } from '../engine/core';
+import { newHealth } from '../engine/health';
 
 const SAVE_KEY = 'baan-non-save';
 const SETTINGS_KEY = 'baan-non-settings';
@@ -13,11 +14,26 @@ export function loadGame(): GameState | null {
   const raw = get(SAVE_KEY);
   if (!raw) return null;
   try {
-    const g = JSON.parse(raw) as GameState;
-    if (g.v !== SAVE_VERSION) return null; // ขั้น 6: แปลงเซฟเก่า
-    return g;
+    const g = migrate(JSON.parse(raw));
+    return g && g.v === SAVE_VERSION ? g : null;
   } catch { return null; }
 }
+/** แปลงเซฟเก่าให้เป็นเวอร์ชันปัจจุบัน ทีละขั้น */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function migrate(g: any): GameState | null {
+  if (!g || typeof g.v !== 'number') return null;
+  if (g.v === 1) { // v1 → v2: เพิ่มสมุดสุขภาพ · ป่วยแบบไม่ระบุโรค → โรคผิวหนัง
+    for (const p of g.pets ?? []) {
+      p.health = newHealth();
+      if (p.sickSince !== null && p.sickSince !== undefined) p.health.disease = 'skin';
+      delete p.sickSince;
+      p.sickDays ??= 0;
+    }
+    g.v = 2;
+  }
+  return g as GameState;
+}
+
 export const saveGame = (g: GameState) => set(SAVE_KEY, JSON.stringify(g));
 export function clearGame() { try { localStorage.removeItem(SAVE_KEY); } catch { /* */ } }
 

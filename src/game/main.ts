@@ -3,10 +3,11 @@ import './game.css';
 import { BALANCE as B, type Mode } from '../engine/balance';
 import { BREEDS, FOODS, breedOf } from '../engine/content';
 import {
-  adopt, bathe, canTrain, catchUpOffline, coax, daysUntilTrain, feed, newGame, petById, play, tickOnline, train, treat,
+  adopt, bathe, canTrain, catchUpOffline, coax, daysUntilTrain, feed, newGame, petById, play, routineCare, tickOnline, train, treat, vaccinate,
   type GameEvent, type GameState,
 } from '../engine/core';
-import { isSick, mood, petAge, petStage, type Pet } from '../engine/pet';
+import { careFor, careState, diseaseOf, dueItems, HEALTH, vaccineState, vaccinesFor, type ItemState } from '../engine/health';
+import { isPostVax, isSick, mood, petAge, petStage, type Pet } from '../engine/pet';
 import { calendar, nightness, SEASONS } from '../engine/time';
 import { Scene } from './scene';
 import { clearGame, loadGame, loadSettings, saveGame, saveSettings } from './store';
@@ -139,10 +140,16 @@ function doFeed() {
     scene.react(p.id, 'eat', el.dataset.f!); floatAt(p.id, '😋');
   }));
 }
+let batheWarnUntil = 0;
 function doBathe() {
   const p = need(); if (!p || !g) return;
   if (p.clean > 0.92) { toast(`${p.name} ยังสะอาดอยู่`); return; }
-  bathe(g, p.id); scene.react(p.id, 'happy'); floatAt(p.id, '🫧');
+  if (isPostVax(p, g.day) && performance.now() > batheWarnUntil) {
+    batheWarnUntil = performance.now() + 4000;
+    toast('เพิ่งฉีดวัคซีน ควรงดอาบน้ำ 1–2 วัน · กดอีกครั้งถ้าจะอาบจริง', 4000); return;
+  }
+  const r = bathe(g, p.id); scene.react(p.id, 'happy'); floatAt(p.id, '🫧');
+  if (r.fever) toast(`${p.name} ตัวรุมๆ เป็นไข้หลังฉีดวัคซีน พาไปคลินิกนะ`, 4500);
 }
 function doTrain() {
   const p = need(); if (!p || !g) return;
@@ -156,14 +163,43 @@ function doTrain() {
     if (hits) { scene.react(p.id, 'happy'); floatAt(p.id, '★'); }
   });
 }
+function stateText(st: ItemState, series = 1): string {
+  switch (st.s) {
+    case 'notyet': return `ยังเด็ก อีก ${Math.ceil(st.inDays)} วัน`;
+    case 'series': return `เข็ม ${st.dose - 1}/${series} · เข็มถัดไปอีก ${Math.ceil(st.inDays)} วัน`;
+    case 'ok': return `ครบ · อีก ${Math.ceil(st.inDays)} วัน`;
+    case 'due': return st.dose ? `ถึงกำหนดเข็ม ${st.dose}/${series}` : 'ถึงกำหนด';
+    case 'overdue': return st.dose ? `เลยกำหนด! เข็ม ${st.dose}/${series}` : 'เลยกำหนด!';
+  }
+}
 function doClinic() {
   const p = need(); if (!p || !g) return;
-  if (!isSick(p)) { openPop(`${head('คลินิกสัตว์')}<p>${p.name} แข็งแรงดี ไม่ต้องรักษา</p><p><small>สมุดวัคซีนและถ่ายพยาธิจะมาในอัปเดตถัดไป</small></p>`); return; }
-  const s = openPop(`${head('คลินิกสัตว์')}<p>${p.name} ไม่สบาย ต้องรักษา</p><button class="cta" id="tr" ${g.money < B.treatCost ? 'disabled' : ''}>รักษา ${B.treatCost} 🪙</button>`);
-  s.querySelector('#tr')!.addEventListener('click', () => {
-    const r = treat(g!, p.id); closePop();
-    if (!r.ok) { toast(r.reason!); return; }
-    toast(`${p.name} หายป่วยแล้ว`); scene.react(p.id, 'happy');
+  const day = g.day, due = dueItems(p, day);
+  const sick = p.health.disease ? diseaseOf(p.health.disease) : null;
+  const canDo = (st: ItemState) => st.s === 'due' || st.s === 'overdue';
+  const vax = vaccinesFor(p).map(v => { const st = vaccineState(p, v, day); return `<div class="opt"><span>${v.name}<br><small>${v.covers} · ${stateText(st, v.series)}</small></span>${canDo(st) ? `<button class="cta mini" data-v="${v.key}" ${g!.money < v.price ? 'disabled' : ''}>ฉีด ${v.price}</button>` : '<span>✓</span>'}</div>`; }).join('');
+  const care = careFor(p).map(c => { const st = careState(p, c, day); return `<div class="opt"><span>${c.name}<br><small>ทุก ${c.every} วัน · ${stateText(st)}</small></span>${canDo(st) ? `<button class="cta mini" data-c="${c.key}" ${g!.money < c.price ? 'disabled' : ''}>ทำ ${c.price}</button>` : '<span>✓</span>'}</div>`; }).join('');
+  const total = [...due.vax, ...due.care].reduce((a, x) => a + x.price, 0);
+  const s = openPop(`${head(`คลินิกสัตว์ · ${p.name}`)}
+    ${sick ? `<div class="alert"><b>อาการ:</b> ${sick.symptom}<br><b>หมอวินิจฉัย:</b> ${sick.name}<br><small>ไม่รักษาเกิน ${sick.limit} วัน น้องจะ${g.mode === 'hard' ? 'จากไป' : 'หนีไปบ้านป้า'}</small>
+      <button class="cta" id="treat" ${g.money < sick.price ? 'disabled' : ''}>รักษาด้วย${sick.med} ${sick.price} 🪙</button></div>` : ''}
+    ${vax ? `<p><b>สมุดวัคซีน</b></p>${vax}` : `<p><b>สมุดวัคซีน</b><br><small>นกไม่มีวัคซีนประจำ ดูแลด้วยการถ่ายพยาธิและวิตามิน</small></p>`}
+    <p><b>ดูแลประจำ</b></p>${care}
+    ${total && !sick ? `<button class="cta" id="all" ${g.money < total ? 'disabled' : ''}>ทำที่ถึงกำหนดทั้งหมด ${total} 🪙</button>` : ''}
+    <p><small>${HEALTH.note}</small></p>`, true);
+  const after = (r: { ok: boolean; reason?: string }, msg: string) => { if (!r.ok) toast(r.reason!); else toast(msg); doClinic(); };
+  s.querySelector('#treat')?.addEventListener('click', () => {
+    const r = treat(g!, p.id);
+    if (r.ok) scene.react(p.id, 'happy');
+    after(r, `${p.name} หายป่วยแล้ว`);
+  });
+  s.querySelectorAll<HTMLElement>('[data-v]').forEach(el => el.addEventListener('click', () => after(vaccinate(g!, p.id, el.dataset.v!), 'ฉีดแล้ว น้องอาจซึม 1–2 วัน ควรงดอาบน้ำก่อน')));
+  s.querySelectorAll<HTMLElement>('[data-c]').forEach(el => el.addEventListener('click', () => after(routineCare(g!, p.id, el.dataset.c!), 'เรียบร้อย')));
+  s.querySelector('#all')?.addEventListener('click', () => {
+    let ok = true;
+    for (const v of due.vax) ok = vaccinate(g!, p.id, v.key).ok && ok;
+    for (const c of due.care) ok = routineCare(g!, p.id, c.key).ok && ok;
+    after({ ok }, due.vax.length ? 'ครบแล้ว น้องอาจซึม 1–2 วัน ควรงดอาบน้ำก่อน' : 'เรียบร้อย');
   });
 }
 function soon(title: string, text: string) { openPop(`${head(title)}<p>${text}</p><p><small>กำลังสร้าง · มาในอัปเดตถัดไป</small></p>`); }
@@ -174,7 +210,8 @@ function showStatus(id: number) {
   const rows: [string, string][] = [
     ['สายพันธุ์', b.name], ['วัย', STAGES[petStage(p, g.day)]], ['อายุ', `${Math.floor(petAge(p, g.day))} วัน`],
     ['อิ่ม', pct(p.full)], ['สะอาด', pct(p.clean)], ['ผูกพัน', pct(p.bond)], ['ฝึก', pct(p.trained)],
-    ['สุขภาพ', p.status === 'away' ? 'อยู่บ้านป้า' : isSick(p) ? 'ไม่สบาย' : 'แข็งแรง'], ['อารมณ์', ['ซึม', 'เฉยๆ', 'ดี', 'ร่าเริง'][Math.min(3, Math.floor(mood(p) * 4))]],
+    ['สุขภาพ', p.status === 'away' ? 'อยู่บ้านป้า' : p.health.disease ? diseaseOf(p.health.disease).name : isPostVax(p, g.day) ? 'ซึมหลังฉีดวัคซีน' : 'แข็งแรง'],
+    ['วัคซีน/ดูแลประจำ', (() => { const d = dueItems(p, g.day), n = d.vax.length + d.care.length; return n ? `ถึงกำหนด ${n} รายการ` : 'ครบ'; })()], ['อารมณ์', ['ซึม', 'เฉยๆ', 'ดี', 'ร่าเริง'][Math.min(3, Math.floor(mood(p) * 4))]],
   ];
   openPop(`${head(p.name)}${rows.map(([k, v]) => `<div class="row"><span>${k}</span><span>${v}</span></div>`).join('')}`);
 }
@@ -232,7 +269,7 @@ function handle(events: GameEvent[]) {
   for (const e of events) {
     if (e.type === 'newDay') continue;
     const name = nameOf(e.petId);
-    if (e.type === 'sick') toast(`${name} ไม่สบาย พาไปคลินิกนะ`, 4000);
+    if (e.type === 'sick') toast(`${name} ไม่สบาย (${diseaseOf(e.disease).symptom}) พาไปคลินิกนะ`, 4500);
     else if (e.type === 'runaway') toast(`${name} หนีไปอยู่บ้านป้าข้างบ้าน`, 4500);
     else if (e.type === 'stage') toast(e.stage === 1 ? `${name} โตเป็นผู้ใหญ่แล้ว` : `${name} เริ่มแก่แล้ว`, 3500);
     else if (e.type === 'died') {
@@ -269,7 +306,7 @@ function renderHud() {
   const home = g.pets.filter(x => x.status === 'home');
   const dots: Record<string, boolean> = {
     feed: home.some(x => x.full < 0.35), bathe: home.some(x => x.clean < 0.3), train: home.some(x => canTrain(g!, x)),
-    clinic: home.some(isSick), play: false, album: false, page: false, menu: false,
+    clinic: home.some(x => isSick(x) || (() => { const d = dueItems(x, g!.day); return d.vax.length + d.care.length > 0; })()), play: false, album: false, page: false, menu: false,
   };
   document.querySelectorAll<HTMLElement>('#btns [data-act]').forEach(el => el.querySelector('.dot')!.classList.toggle('on', dots[el.dataset.act!]));
   // ป้ายเมื่อน้องไม่อยู่ / บ้านว่าง

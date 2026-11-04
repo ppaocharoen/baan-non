@@ -7,7 +7,9 @@
 // หมายเหตุ: ยังไม่มีรายได้จนกว่าจะถึงขั้น 5 → sim ให้เงินไม่จำกัด เพื่อดูแค่เรื่องการดูแล
 import { BALANCE as B, type Mode } from '../src/engine/balance';
 import { BREEDS } from '../src/engine/content';
-import { adopt, bathe, canTrain, catchUpOffline, coax, feed, newGame, play, tickOnline, train, treat, type GameState } from '../src/engine/core';
+import { adopt, bathe, canTrain, catchUpOffline, coax, feed, newGame, play, routineCare, tickOnline, train, treat, vaccinate, type GameState } from '../src/engine/core';
+import { careFor, dueItems, vaccinesFor } from '../src/engine/health';
+import { isSick, type Pet } from '../src/engine/pet';
 import { nextRandom } from '../src/engine/rng';
 import { realHoursOffline } from '../src/engine/time';
 
@@ -19,11 +21,17 @@ const goal = (name: string, ok: boolean, detail: string) => {
   if (!ok) failed++;
 };
 
-function fresh(mode: Mode, seed: number, breed: string) {
+function fresh(mode: Mode, seed: number, breed: string, vaccinated = false) {
   const g = newGame(mode, seed, 0);
   g.money = 1e12;
   const pet = adopt(g, breed, 'น้อน').pet!;
+  if (vaccinated) upToDate(g, pet);
   return { g, id: pet.id };
+}
+/** ทำให้วัคซีนและการดูแลประจำครบ ณ วันนี้ (น้องที่ได้รับการดูแลมาดี) */
+function upToDate(g: GameState, p: Pet) {
+  for (const v of vaccinesFor(p)) p.health.vax[v.key] = { doses: v.series, last: g.day };
+  for (const c of careFor(p)) p.health.care[c.key] = g.day;
 }
 
 /** ผู้เล่นดูแลปกติ: เปิดเกมแล้วทำครบทุกอย่างที่ควรทำ */
@@ -33,9 +41,12 @@ function careSession(g: GameState, now: number, minutes: number, rngHits: { rng:
     for (const p of [...g.pets]) {
       if (p.status === 'away') coax(g, p.id);
       if (p.status !== 'home') continue;
-      if (p.sickSince !== null) treat(g, p.id);
+      if (isSick(p)) treat(g, p.id);
+      const due = dueItems(p, g.day);
+      for (const v of due.vax) vaccinate(g, p.id, v.key);
+      for (const c of due.care) routineCare(g, p.id, c.key);
       if (p.full < 0.7) feed(g, p.id, 'kibble');
-      if (p.clean < 0.5) bathe(g, p.id);
+      if (p.clean < 0.5 && g.day >= p.health.postVaxUntil) bathe(g, p.id);
       for (let i = 0; i < B.playsPerDay; i++) play(g, p.id);
       if (canTrain(g, p)) train(g, p.id, 3 + Math.floor(nextRandom(rngHits) * 3));
     }
@@ -81,11 +92,11 @@ function careSession(g: GameState, now: number, minutes: number, rngHits: { rng:
   let unsafe = 0, minFull = 1;
   for (let seed = 1; seed <= 200; seed++) {
     const br = BREEDS[seed % BREEDS.length];
-    const { g, id } = fresh('normal', seed, br.key);
+    const { g, id } = fresh('normal', seed, br.key, true);
     feed(g, id, 'rice'); bathe(g, id);
     catchUpOffline(g, 23 * H);
     const p = g.pets.find(x => x.id === id);
-    if (!p || p.status !== 'home' || p.sickSince !== null || p.full < B.hungryBelow) unsafe++;
+    if (!p || p.status !== 'home' || isSick(p) || p.full < B.hungryBelow) unsafe++;
     if (p) minFull = Math.min(minFull, p.full);
   }
   goal('2. ปิดเกม 23 ชม.ปลอดภัย', unsafe === 0, `200 รอบ ไม่ปลอดภัย ${unsafe} · อิ่มต่ำสุดตอนกลับมา ${minFull.toFixed(2)}`);
@@ -97,7 +108,7 @@ function careSession(g: GameState, now: number, minutes: number, rngHits: { rng:
     const tally = { home: 0, away: 0, dead: 0 };
     for (let seed = 1; seed <= 200; seed++) {
       const br = BREEDS[seed % BREEDS.length];
-      const { g, id } = fresh(mode, seed, br.key);
+      const { g, id } = fresh(mode, seed, br.key, true);
       feed(g, id, 'rice'); bathe(g, id);
       catchUpOffline(g, 4 * 24 * H);
       const p = g.pets.find(x => x.id === id);
@@ -125,7 +136,7 @@ function careSession(g: GameState, now: number, minutes: number, rngHits: { rng:
   row('หนี / ตาย (โหมดเข้ม)', neglectAt);
 }
 
-// ---------- รายงาน: ผู้เล่นขี้ลืม (วันละครั้ง 10 นาที · ข้าวคลุกปลาทู · อาบน้ำเมื่อสกปรกมาก · บางวันลืมเปิด) ----------
+// ---------- รายงาน: ผู้เล่นขี้ลืม (วันละครั้ง 10 นาที · ข้าวคลุกปลาทู · อาบน้ำเมื่อสกปรกมาก · บางวันลืมเปิด · ไม่เคยพาไปฉีดวัคซีน) ----------
 {
   let sick = 0, runaway = 0, lives = 0;
   for (let seed = 1; seed <= 100; seed++) {
@@ -141,7 +152,7 @@ function careSession(g: GameState, now: number, minutes: number, rngHits: { rng:
       runaway += ev.filter(e => e.type === 'runaway').length;
       for (const p of [...g.pets]) {
         if (p.status === 'away') coax(g, p.id);
-        if (p.sickSince !== null) treat(g, p.id);
+        if (isSick(p)) treat(g, p.id);
         feed(g, p.id, 'rice');
         if (p.clean < 0.2) bathe(g, p.id);
       }

@@ -4,9 +4,10 @@ import { BALANCE as B, type Mode } from './balance';
 import { breedOf, foodOf } from './content';
 import { nextRandom } from './rng';
 import { offlineDays, onlineDays } from './time';
-import { atRisk, decayPet, isSick, petAge, petStage, type Grave, type Pet } from './pet';
+import { careOf, diseaseOf, diseaseRisks, HEALTH, newHealth, vaccineOf, vaccineState, careState } from './health';
+import { decayPet, isPostVax, isSick, petAge, petStage, type Grave, type Pet } from './pet';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export interface GameState {
   v: number;
@@ -24,7 +25,7 @@ export interface GameState {
 }
 
 export type GameEvent =
-  | { type: 'sick'; petId: number }
+  | { type: 'sick'; petId: number; disease: string }
   | { type: 'runaway'; petId: number }
   | { type: 'died'; petId: number; cause: 'age' | 'neglect' }
   | { type: 'stage'; petId: number; stage: 0 | 1 | 2 }
@@ -69,14 +70,21 @@ function stepPet(g: GameState, p: Pet, dt: number, needsMult: number, events: Ga
 
   decayPet(p, dt, needsMult);
 
-  // สุ่มป่วย
-  if (atRisk(p) && nextRandom(g) < B.sickChancePerDay * p.lastFoodSick * dt * needsMult) {
-    p.sickSince = g.day;
-    events.push({ type: 'sick', petId: p.id });
+  // สุ่มป่วย: รวมโอกาสทุกโรค แล้วเลือกโรคตามน้ำหนัก (ตอนปิดเกมช้าลงเท่าความหิว)
+  if (!isSick(p)) {
+    const risks = diseaseRisks(p, g.day, p.lastFoodSick);
+    const total = risks.reduce((a, r) => a + r.perDay, 0);
+    if (total > 0 && nextRandom(g) < total * dt * needsMult) {
+      let pick = nextRandom(g) * total, chosen = risks[0].d;
+      for (const r of risks) { pick -= r.perDay; if (pick <= 0) { chosen = r.d; break; } }
+      p.health.disease = chosen.key;
+      events.push({ type: 'sick', petId: p.id, disease: chosen.key });
+    }
   }
 
   // ถูกละเลยนานมาก
-  const neglected = p.starveDays > B.starveLimit || p.sickDays > B.sickLimit;
+  const sickLimit = p.health.disease ? diseaseOf(p.health.disease).limit : Infinity;
+  const neglected = p.starveDays > B.starveLimit || p.sickDays > sickLimit;
   if (neglected) {
     if (B.modes[g.mode].neglect === 'die') { bury(g, p, 'neglect'); events.push({ type: 'died', petId: p.id, cause: 'neglect' }); }
     else { p.status = 'away'; events.push({ type: 'runaway', petId: p.id }); }
@@ -108,7 +116,7 @@ export function adopt(g: GameState, breedKey: string, name: string, price = 0): 
   const lifespan = br.life[0] + Math.floor(nextRandom(g) * (br.life[1] - br.life[0] + 1));
   const pet: Pet = {
     id: g.nextId++, breed: br.key, name, born: g.day, lifespan, status: 'home',
-    full: 0.8, clean: 0.8, bond: 0.1, trained: 0, sickSince: null, sickDays: 0,
+    full: 0.8, clean: 0.8, bond: 0.1, trained: 0, health: newHealth(), sickDays: 0,
     hungryDays: 0, dirtyDays: 0, starveDays: 0, lastFoodSick: 1,
     fedBondDay: -1, bathBondDay: -1, playDay: -1, playsToday: 0, lastTrain: -1e9,
   };
@@ -138,10 +146,15 @@ export function feed(g: GameState, id: number, foodKey: string): Result {
   return OK;
 }
 
-export function bathe(g: GameState, id: number): Result {
+export function bathe(g: GameState, id: number): Result & { fever?: boolean } {
   const p = atHome(g, id); if (!isPet(p)) return p;
   p.clean = 1;
   if (p.bathBondDay !== today(g)) { p.bathBondDay = today(g); addBond(p, B.bondBathe); }
+  // เพิ่งฉีดวัคซีนแล้วอาบน้ำ เสี่ยงเป็นไข้
+  if (isPostVax(p, g.day) && !isSick(p) && nextRandom(g) < HEALTH.postVaxBathFever) {
+    p.health.disease = 'fever';
+    return { ...OK, fever: true };
+  }
   return OK;
 }
 
@@ -168,14 +181,45 @@ export function train(g: GameState, id: number, hits: number): Result {
   return OK;
 }
 
-/** พาไปคลินิก (ขั้น 4 จะแยกตามโรคและยา) */
+/** รักษาที่คลินิก: สัตวแพทย์วินิจฉัยแล้วจ่ายยาตรงโรค */
 export function treat(g: GameState, id: number): Result {
   const p = atHome(g, id); if (!isPet(p)) return p;
-  if (!isSick(p)) return fail('น้องไม่ได้ป่วย');
-  if (g.money < B.treatCost) return fail('เงินไม่พอ');
-  g.money -= B.treatCost;
-  p.sickSince = null;
+  if (!p.health.disease) return fail('น้องไม่ได้ป่วย');
+  const d = diseaseOf(p.health.disease);
+  if (g.money < d.price) return fail('เงินไม่พอ');
+  g.money -= d.price;
+  p.health.disease = null;
   p.sickDays = 0;
+  return OK;
+}
+
+/** ฉีดวัคซีน (เข็มถัดไปในชุด หรือเข็มกระตุ้น) */
+export function vaccinate(g: GameState, id: number, key: string): Result {
+  const p = atHome(g, id); if (!isPet(p)) return p;
+  const v = vaccineOf(key);
+  if (!v || v.species !== breedOf(p.breed).species) return fail('วัคซีนนี้ไม่ใช่ของน้อง');
+  if (isSick(p)) return fail('น้องป่วยอยู่ รักษาให้หายก่อนค่อยฉีด');
+  const st = vaccineState(p, v, g.day);
+  if (st.s === 'notyet') return fail(`ยังเด็กเกินไป อีก ${Math.ceil(st.inDays)} วัน`);
+  if (st.s === 'series' || st.s === 'ok') return fail(`ยังไม่ถึงกำหนด อีก ${Math.ceil(st.inDays)} วัน`);
+  if (g.money < v.price) return fail('เงินไม่พอ');
+  g.money -= v.price;
+  const r = p.health.vax[key] ?? { doses: 0, last: 0 };
+  p.health.vax[key] = { doses: Math.min(v.series, r.doses + 1), last: g.day };
+  p.health.postVaxUntil = g.day + HEALTH.postVaxDays;
+  return OK;
+}
+
+/** ดูแลประจำ: ถ่ายพยาธิ ป้องกันเห็บหมัด วิตามิน */
+export function routineCare(g: GameState, id: number, key: string): Result {
+  const p = atHome(g, id); if (!isPet(p)) return p;
+  const c = careOf(key);
+  if (!c || c.species !== breedOf(p.breed).species) return fail('รายการนี้ไม่ใช่ของน้อง');
+  const st = careState(p, c, g.day);
+  if (st.s === 'ok') return fail(`ยังไม่ถึงกำหนด อีก ${Math.ceil(st.inDays)} วัน`);
+  if (g.money < c.price) return fail('เงินไม่พอ');
+  g.money -= c.price;
+  p.health.care[key] = g.day;
   return OK;
 }
 
@@ -188,7 +232,8 @@ export function coax(g: GameState, id: number): Result {
   g.money -= B.coaxCost;
   Object.assign(p, {
     status: 'home', bond: p.bond * B.coaxBondMult, full: B.coaxFull, clean: B.coaxClean,
-    sickSince: null, sickDays: 0, hungryDays: 0, dirtyDays: 0, starveDays: 0,
+    sickDays: 0, hungryDays: 0, dirtyDays: 0, starveDays: 0,
   });
+  p.health.disease = null;
   return OK;
 }

@@ -1,6 +1,7 @@
 // สัตว์เลี้ยงแต่ละตัว: ค่าต่างๆ · วัย · การเปลี่ยนแปลงตามเวลา
 import { BALANCE as B } from './balance';
 import { breedOf } from './content';
+import type { HealthState } from './health';
 
 export type PetStatus = 'home' | 'away';
 
@@ -17,8 +18,8 @@ export interface Pet {
   clean: number;    // สะอาด 0–1
   bond: number;     // ผูกพัน 0–1
   trained: number;  // ฝึก 0–1
-  /** วันที่เริ่มป่วย (null = ไม่ป่วย) */
-  sickSince: number | null;
+  /** สมุดวัคซีน การดูแลประจำ และโรคที่เป็นอยู่ */
+  health: HealthState;
   /** ตัวนับต่อเนื่อง (วัน · ตอนปิดเกมนับช้าลงเท่ากับความหิว) */
   sickDays: number;
   hungryDays: number;
@@ -47,9 +48,9 @@ export function petStage(p: Pet, day: number): 0 | 1 | 2 {
 
 export const isHungry = (p: Pet) => p.full < B.hungryBelow;
 export const isDirty = (p: Pet) => p.clean < B.dirtyBelow;
-export const isSick = (p: Pet) => p.sickSince !== null;
+export const isSick = (p: Pet) => p.health.disease !== null;
 /** อาการซึม: เตือนก่อนถึงจุดหนี/ตาย */
-export const isWeak = (p: Pet) => p.starveDays > 0 || (p.sickSince !== null);
+export const isWeak = (p: Pet) => p.starveDays > 0 || isSick(p);
 
 /** อารมณ์ 0–1 สำหรับเลือกท่าในฉากและคะแนนโพสต์ */
 export function mood(p: Pet): number {
@@ -57,6 +58,9 @@ export function mood(p: Pet): number {
   const base = 0.4 * p.full + 0.3 * p.clean + 0.3 * p.bond;
   return isSick(p) ? base * 0.4 : base;
 }
+/** ซึมหลังฉีดวัคซีน */
+export const isPostVax = (p: Pet, day: number) => day < p.health.postVaxUntil;
+
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
@@ -80,6 +84,3 @@ export function decayPet(p: Pet, dt: number, needsMult = 1) {
   p.bond = clamp01(p.bond + db * ndt);
 }
 
-/** อยู่ในช่วงเสี่ยงป่วยไหม */
-export const atRisk = (p: Pet) =>
-  p.status === 'home' && !isSick(p) && (p.hungryDays > B.riskAfterDays || p.dirtyDays > B.riskAfterDays);

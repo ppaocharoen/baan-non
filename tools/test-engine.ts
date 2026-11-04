@@ -1,7 +1,8 @@
 // ทดสอบเครื่องยนต์ — รันใน CI ก่อน sim และ build
 import { BALANCE as B } from '../src/engine/balance';
 import { BREEDS, breedOf, FOODS } from '../src/engine/content';
-import { adopt, advance, bathe, canTrain, catchUpOffline, coax, feed, newGame, play, tickOnline, train, treat, type GameState } from '../src/engine/core';
+import { adopt, advance, bathe, canTrain, catchUpOffline, coax, feed, newGame, play, routineCare, tickOnline, train, treat, vaccinate, type GameState } from '../src/engine/core';
+import { diseaseOf, dueItems, HEALTH, vaccineState, vaccineOf, vaccinesFor } from '../src/engine/health';
 import { petStage } from '../src/engine/pet';
 import { nextRandom } from '../src/engine/rng';
 import { calendar, nightness, offlineDays } from '../src/engine/time';
@@ -12,10 +13,15 @@ function check(name: string, ok: boolean) {
   if (!ok) fails++;
 }
 const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) < eps;
-function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew'): { g: GameState; id: number } {
+function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew', protect = false): { g: GameState; id: number } {
   const g = newGame(mode, 42, 0);
   g.money = 10000;
-  return { g, id: adopt(g, breed, 'ทดสอบ').pet!.id };
+  const p = adopt(g, breed, 'ทดสอบ').pet!;
+  if (protect) { // วัคซีน/ดูแลประจำครบ และกระตุ้นไว้ไกลๆ เพื่อทดสอบเรื่องอื่นโดยไม่มีโรคแทรก
+    for (const v of HEALTH.vaccines) p.health.vax[v.key] = { doses: v.series, last: 1e6 };
+    for (const c of HEALTH.care) p.health.care[c.key] = 1e6;
+  }
+  return { g, id: p.id };
 }
 
 // ---- RNG / ข้อมูล ----
@@ -39,7 +45,7 @@ function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew'): { g: Gam
 
 // ---- การดูแล ----
 {
-  const { g, id } = setup();
+  const { g, id } = setup('normal', 'bangkaew', true);
   const p = g.pets[0];
   advance(g, 5);
   check('ความอิ่มลดวันละ 0.04', near(p.full, 0.8 - 0.2, 1e-9));
@@ -70,9 +76,9 @@ function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew'): { g: Gam
   p.full = 0; p.clean = 0;
   let sick = false;
   for (let i = 0; i < 40 && !sick; i++) sick = advance(g, 1).some(e => e.type === 'sick');
-  check('หิวและสกปรกนาน → ป่วย', sick && p.sickSince !== null);
+  check('หิวและสกปรกนาน → ป่วย', sick && p.health.disease !== null);
   check('ป่วยแล้วฝึกไม่ได้', !train(g, id, 5).ok);
-  check('รักษาที่คลินิกหาย', treat(g, id).ok && p.sickSince === null);
+  check('รักษาที่คลินิกหาย', treat(g, id).ok && p.health.disease === null);
 
   advance(g, 40);
   check('โหมดปกติ ละเลยนาน → หนีไปบ้านป้า', p.status === 'away' && g.pets.length === 1);
@@ -99,6 +105,58 @@ function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew'): { g: Gam
   check('โตเป็นผู้ใหญ่และแก่ตามลำดับ', stages.join(',') === '1,2');
   check('หมดอายุขัย → สวนสวรรค์', g.heaven[0]?.cause === 'age' && Math.abs(g.heaven[0].ageDays - p.lifespan) < 0.06);
   check('petStage ตอนเกิด = เด็ก', petStage({ ...p, born: 0 }, 0) === 0);
+}
+
+// ---- สุขภาพ: วัคซีน ดูแลประจำ โรค ----
+{
+  const { g, id } = setup('normal', 'bangkaew');
+  const p = g.pets[0], combo = vaccineOf('dog_combo');
+  check('หมามีวัคซีน 2 ชนิด นกไม่มี', vaccinesFor(p).length === 2 && vaccinesFor(setup('normal', 'myna').g.pets[0]).length === 0);
+  check('เด็กเกินไปฉีดไม่ได้', !vaccinate(g, id, 'dog_combo').ok);
+  advance(g, combo.minAge);
+  check('ถึงอายุ ฉีดเข็ม 1 ได้', vaccinate(g, id, 'dog_combo').ok && p.health.vax.dog_combo.doses === 1);
+  check('ฉีดซ้ำก่อนครบระยะไม่ได้', !vaccinate(g, id, 'dog_combo').ok);
+  check('หลังฉีดซึม (postVax)', g.day < p.health.postVaxUntil);
+  advance(g, combo.gap); vaccinate(g, id, 'dog_combo');
+  advance(g, combo.gap); vaccinate(g, id, 'dog_combo');
+  check('ครบชุด 3 เข็ม', p.health.vax.dog_combo.doses === 3 && vaccineState(p, combo, g.day).s === 'ok');
+  for (let i = 0; i < combo.booster - HEALTH.dueEarly; i++) { advance(g, 1); feed(g, id, 'rice'); }
+  check('ใกล้ครบรอบ → ถึงกำหนดกระตุ้น', vaccineState(p, combo, g.day).s === 'due' && dueItems(p, g.day).vax.some(v => v.key === 'dog_combo'));
+  check('ถ่ายพยาธิได้ แล้วไม่ถึงกำหนดอีก', routineCare(g, id, 'dog_deworm').ok && !routineCare(g, id, 'dog_deworm').ok);
+}
+{
+  // ไม่ฉีดวัคซีน ไม่ถ่ายพยาธิ แต่ให้อาหาร/อาบน้ำ → ป่วยจากโรคที่ป้องกันได้
+  const { g, id } = setup('normal', 'korat');
+  const p = g.pets[0];
+  let got: string | null = null;
+  for (let d = 0; d < 120 && !got; d++) { advance(g, 1); feed(g, id, 'rice'); if (p.clean < 0.5) bathe(g, id); got = p.health.disease; }
+  check('ไม่ป้องกัน → ป่วยโรคที่ป้องกันได้', got !== null && ['vaccine', 'care'].includes(diseaseOf(got).cause));
+  const before = g.money, price = diseaseOf(got!).price;
+  check('รักษาเสียค่ายาตามโรค', treat(g, id).ok && before - g.money === price);
+}
+{
+  // ฉีดครบ ดูแลครบ → ไม่ป่วยเลย 200 วัน
+  const { g, id } = setup('normal', 'langan');
+  const p = g.pets[0];
+  let sick = 0;
+  for (let d = 0; d < 200; d++) {
+    sick += advance(g, 1).filter(e => e.type === 'sick').length;
+    feed(g, id, 'kibble'); if (p.clean < 0.5 && g.day >= p.health.postVaxUntil) bathe(g, id);
+    const due = dueItems(p, g.day);
+    due.vax.forEach(v => vaccinate(g, id, v.key)); due.care.forEach(c => routineCare(g, id, c.key));
+  }
+  check('ดูแลครบ ไม่ป่วยเลย 200 วัน', sick === 0);
+}
+{
+  // อาบน้ำหลังฉีดวัคซีน → บางครั้งเป็นไข้
+  let fevers = 0;
+  for (let s = 1; s <= 60; s++) {
+    const g = newGame('normal', s, 0); g.money = 1e6;
+    const id = adopt(g, 'khaomanee', 'x').pet!.id;
+    advance(g, 3); vaccinate(g, id, 'cat_combo'); g.pets[0].clean = 0.5;
+    if (bathe(g, id).fever) fevers++;
+  }
+  check('อาบน้ำหลังฉีดวัคซีน เสี่ยงไข้ ~30%', fevers > 8 && fevers < 30);
 }
 
 // ---- เซฟเป็น JSON ได้ และเล่นต่อได้ผลเดิม ----

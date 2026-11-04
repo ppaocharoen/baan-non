@@ -1,7 +1,7 @@
 // ฉากชานบ้านริมคลอง: จอแนวตั้งเป็นหน้าต่างมองโลกกว้าง กล้องเลื่อนซ้ายขวา · วาดน้องทุกตัว · รับแตะ/กดค้าง/ปัด
 import { breedOf, foodOf, type Breed } from '../engine/content';
 import type { GameState } from '../engine/core';
-import { isSick, petStage, type Pet } from '../engine/pet';
+import { isPostVax, isSick, petStage, type Pet } from '../engine/pet';
 import { nightness } from '../engine/time';
 
 /** ความสูงโลก (พิกเซลเกม) — ความกว้างโลกตามสัดส่วนภาพฉาก */
@@ -147,7 +147,7 @@ export class Scene {
     const stage = petStage(p, g.day), night = nightness(g.day) > 0.6;
     if (a.action === 'eat' || a.action === 'happy') { if (this.t < a.until) return; a.action = 'idle'; }
     if (this.t < a.nextThink) return;
-    const lazy = isSick(p) || p.full < 0.15 || stage === 2;
+    const lazy = isSick(p) || isPostVax(p, g.day) || p.full < 0.15 || stage === 2;
     if (night || (stage === 2 && Math.random() < 0.5)) { a.action = 'sleep'; a.nextThink = this.t + 6 + Math.random() * 6; return; }
     if (!lazy && Math.random() < 0.65) {
       const R = this.worldW - FLOOR_R_PAD;
