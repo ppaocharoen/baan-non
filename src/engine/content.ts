@@ -17,6 +17,8 @@ export interface Breed {
   art: string;
   /** ขนาดภาพในฉาก (พิกเซลเกมต่อพิกเซลภาพ) */
   scale: number;
+  /** ตัวคูณขนาดของชีตท่าเพิ่ม `<art>_x.png` (2×3: กิน · ท่าเฉพาะชนิด) ให้ตัวเท่าชีตหลัก */
+  xScale: number;
 }
 
 export const BREEDS = breedsJson as Breed[];

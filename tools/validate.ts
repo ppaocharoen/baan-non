@@ -17,6 +17,8 @@ for (const b of BREEDS) {
   if (!(b.stages[0] > 0 && b.stages[0] < b.stages[1] && b.stages[1] < b.life[0])) errors.push(`${where}: stages ต้องอยู่ก่อนอายุขัยต่ำสุด`);
   if (!(b.scale > 0 && b.scale < 1)) errors.push(`${where}: scale ผิด`);
   if (!fs.existsSync(path.join(ROOT, 'public/art', `${b.art}.png`))) errors.push(`${where}: ไม่มีไฟล์ภาพ public/art/${b.art}.png`);
+  if (!fs.existsSync(path.join(ROOT, 'public/art', `${b.art}_x.png`))) errors.push(`${where}: ไม่มีชีตท่าเพิ่ม public/art/${b.art}_x.png`);
+  if (!(b.xScale > 0.5 && b.xScale < 2)) errors.push(`${where}: xScale ผิด`);
 }
 
 const foodKeys = new Set<string>();
