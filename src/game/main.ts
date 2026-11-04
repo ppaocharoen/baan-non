@@ -4,7 +4,7 @@ import './game.css';
 import { BREEDS, type Breed } from '../engine/content';
 
 const SCENE_W = 240, SCENE_H = 168;
-const GROUND = Math.round(SCENE_H * 0.84); // พื้นเป็นแถบ 16% ล่าง
+const GROUND = 142; // แนวเท้าบนพื้นชานบ้าน (ภาพฉากจริงพื้นลึกกว่า 16%)
 
 const canvas = document.getElementById('scene') as HTMLCanvasElement;
 const ctx = canvas.getContext('2d')!;
@@ -20,6 +20,8 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+const loadImg = (name: string) => { const im = new Image(); im.src = `./art/${name}.png`; return im; };
+const bgDay = loadImg('bg_home_day'), bgNight = loadImg('bg_home_night');
 const sheets: Record<string, HTMLImageElement> = {};
 for (const b of BREEDS) {
   const im = new Image();
@@ -40,18 +42,23 @@ const walkers: Walker[] = BREEDS.map((breed, i) => ({
 
 const rx = (v: number) => Math.round(v * K) / K; // ปัดพิกัดลงตาราง K ภาพจะคม
 
+function drawBg(im: HTMLImageElement, alpha: number) {
+  if (!im.complete || !im.naturalWidth || alpha <= 0) return;
+  // ขยายแบบ cover ให้เต็มฉาก ชิดขอบล่าง
+  const s = Math.max(SCENE_W / im.naturalWidth, SCENE_H / im.naturalHeight);
+  const w = im.naturalWidth * s, h = im.naturalHeight * s;
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(im, rx((SCENE_W - w) / 2), rx(SCENE_H - h), rx(w), rx(h));
+  ctx.globalAlpha = 1;
+}
+
 function drawBackground(t: number) {
-  // ท้องฟ้าชั่วคราว เปลี่ยนกลางวัน/กลางคืนทุก 40 วินาที (จะแทนด้วยภาพฉากจริง)
-  const night = (Math.sin(t / 40 * Math.PI * 2) + 1) / 2;
-  const mix = (a: number[], b: number[]) => `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * night)).join(',')})`;
-  ctx.fillStyle = mix([150, 205, 230], [30, 40, 80]);
-  ctx.fillRect(0, 0, SCENE_W, GROUND - 30);
-  ctx.fillStyle = mix([70, 140, 110], [20, 50, 60]); // คลอง
-  ctx.fillRect(0, GROUND - 30, SCENE_W, 30);
-  ctx.fillStyle = mix([150, 100, 60], [70, 45, 35]); // พื้นไม้ชานบ้าน
-  ctx.fillRect(0, GROUND, SCENE_W, SCENE_H - GROUND);
-  ctx.fillStyle = mix([120, 78, 45], [55, 35, 28]);
-  for (let x = 0; x < SCENE_W; x += 16) ctx.fillRect(x, GROUND, 1, SCENE_H - GROUND);
+  // ทดลองเปลี่ยนกลางวัน/กลางคืนทุก 40 วินาที (ของจริงจะผูกกับเวลาในเกม)
+  const night = Math.min(1, Math.max(0, Math.sin(t / 40 * Math.PI * 2) * 1.5 + 0.5));
+  ctx.fillStyle = '#2a1d14';
+  ctx.fillRect(0, 0, SCENE_W, SCENE_H);
+  drawBg(bgDay, 1);
+  drawBg(bgNight, night);
 }
 
 function drawWalker(w: Walker, dt: number, t: number) {
