@@ -10,7 +10,8 @@ import { careFor, careState, diseaseOf, dueItems, HEALTH, vaccineState, vaccines
 import { isPostVax, isSick, mood, petAge, petStage, type Pet } from '../engine/pet';
 import { calendar, nightness, SEASONS } from '../engine/time';
 import { Scene } from './scene';
-import { clearGame, loadGame, loadSettings, saveGame, saveSettings } from './store';
+import { clearGame, loadGame, loadSettings, photoUrl, saveGame, savePhoto, saveSettings } from './store';
+import { addPhoto, freshness, hourFactor, post, postsLeft, SOCIAL, TIER_TH } from '../engine/social';
 import { applyTheme, THEMES } from './themes';
 import { runTraining } from './train';
 import { petPitch, sfx } from './sound';
@@ -141,6 +142,7 @@ function welcome() {
       saveGame(g); closePop();
       sfx.jingle(); voice(r.pet!, 'happy', 700);
       toast(`${name} มาอยู่บ้านแล้ว แตะน้องเพื่อเล่นด้วย`);
+      offerMoment('น้องมาอยู่บ้านวันแรก', 2, [r.pet!.id], 2500);
     }, false);
   }));
 }
@@ -158,6 +160,7 @@ function doPlay(id: number) {
   const r = play(g, id);
   if (!r.ok) { toast(r.reason!); const p = petById(g, id); if (p) voice(p); return; }
   scene.react(id, 'happy'); floatAt(id, '♥');
+  if (Math.random() < 0.35) offerMoment('ดีใจ', 0, [id], 600);
   const p = petById(g, id); if (p) voice(p, 'happy');
 }
 function doFeed() {
@@ -169,6 +172,7 @@ function doFeed() {
     if (!r.ok) { toast(r.reason!); return; }
     scene.react(p.id, 'eat', el.dataset.f!); floatAt(p.id, '😋');
     sfx.munch(); voice(p, 'happy', 900);
+    offerMoment('กินข้าว', 1, [p.id], 1500);
   }));
 }
 let batheWarnUntil = 0;
@@ -183,7 +187,7 @@ function doBathe() {
   sfx.bubbles();
   if (r.shampoo) toast(`ใช้แชมพู ${p.name} หอมสะอาดนานขึ้น`, 2000);
   if (r.fever) { toast(`${p.name} ตัวรุมๆ เป็นไข้หลังฉีดวัคซีน พาไปคลินิกนะ`, 4500); voice(p, 'sad', 900); }
-  else voice(p, 'happy', 700);
+  else { voice(p, 'happy', 700); offerMoment('ขนฟูหลังอาบน้ำ', 0, [p.id], 900); }
 }
 function doTrain() {
   const p = need(); if (!p || !g) return;
@@ -194,7 +198,7 @@ function doTrain() {
     const before = p.trained;
     const r = train(g!, p.id, hits); closePop();
     toast(hits ? `${p.name} เก่งขึ้น +${Math.round((p.trained - before) * 100)}%${r.treat ? ' (ใช้ขนมฝึก)' : ''}` : 'รอบนี้พลาดหมด ไว้ลองใหม่สัปดาห์หน้า');
-    if (hits) { scene.react(p.id, 'happy'); floatAt(p.id, '★'); voice(p, 'happy'); }
+    if (hits) { scene.react(p.id, 'happy'); floatAt(p.id, '★'); voice(p, 'happy'); if (hits >= 4) offerMoment('ฝึกท่าใหม่สำเร็จ', 1, [p.id], 500); }
   });
 }
 function stateText(st: ItemState, series = 1): string {
@@ -273,6 +277,7 @@ function menu() {
     const r = adopt(g!, breed, name, B.adoptPrice); closePop();
     if (!r.ok) { toast(r.reason!); return; }
     select(r.pet!.id); toast(`${name} มาอยู่บ้านแล้ว`); sfx.jingle(); voice(r.pet!, 'happy', 700);
+    offerMoment('น้องใหม่มาอยู่บ้าน', 2, [r.pet!.id], 2500);
   }));
   s.querySelector('#m-heaven')!.addEventListener('click', () => openPop(`${head('สวนสวรรค์สัตว์เลี้ยง')}${g!.heaven.length ? g!.heaven.map(h => `<div class="row"><span>${h.name} · ${breedOf(h.breed).name}</span><span>${Math.floor(h.ageDays)} วัน</span></div>`).join('') : '<p>ยังไม่มีน้องตัวไหนจากไป</p>'}`, true));
   s.querySelector('#m-info')!.addEventListener('click', () => openPop(`${head('บ้านน้อน · Baan Non: Klong Life')}<p>เกมเลี้ยงน้องหมา แมว นก ในเรือนไทยริมคลอง</p><p>ตอนปิดเกม เวลายังเดินแต่ช้าลงมาก น้องหิวช้าลงด้วย</p><p><small>เวอร์ชันทดลอง v0.1 · กำลังสร้าง</small></p>`));
@@ -320,7 +325,7 @@ function themePicker() {
 const ACTIONS: Record<string, () => void> = {
   feed: doFeed, bathe: doBathe, train: doTrain, clinic: doClinic, menu,
   shop: () => shop(), decor: () => setEdit(true),
-  page: () => soon('เพจบ้านน้อน', 'ช่องโซเชียลของน้อง: อัลบั้มรูปจากจังหวะชัตเตอร์ โพสต์ ผู้ติดตาม และรายได้จากโฆษณา'),
+  page: () => page(),
 };
 document.querySelectorAll<HTMLElement>('#btns [data-act]').forEach(el => el.addEventListener('click', () => { sfx.click(); if (g) ACTIONS[el.dataset.act!](); }));
 $('hud').addEventListener('click', () => { const p = sel(); if (p) showStatus(p.id); });
@@ -332,8 +337,8 @@ const cycle = (d: number) => {
 $('prev').addEventListener('click', () => cycle(-1));
 $('next').addEventListener('click', () => cycle(1));
 $('chip-time').addEventListener('click', () => { if (!g) return; const c = calendar(g.day); toast(`ปีที่ ${c.year} · ฤดู${SEASONS[c.season]} วันที่ ${c.dayOfSeason}/${B.daysPerSeason}`); });
-$('chip-money').addEventListener('click', () => toast('รายได้จากเพจของน้องจะมาในอัปเดตถัดไป'));
-$('chip-fans').addEventListener('click', () => toast('ผู้ติดตามเพจบ้านน้อน · เร็วๆ นี้'));
+$('chip-money').addEventListener('click', () => toast('หาเงินได้จากเพจบ้านน้อน: ถ่ายรูปน้องแล้วโพสต์'));
+$('chip-fans').addEventListener('click', () => { if (g) page(); });
 
 // ---------- ร้าน · จัดบ้าน ----------
 const SPECIES_TH: Record<string, string> = { dog: 'หมา', cat: 'แมว', bird: 'นก' };
@@ -406,6 +411,83 @@ function useItem(uid: number) {
   toast(f.name, 1200);
 }
 
+// ---------- จังหวะชัตเตอร์ · อัลบั้ม · เพจ ----------
+const fmtFans = (n: number) => (n >= 10000 ? `${(n / 1000).toFixed(0)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.floor(n)));
+let moment: { label: string; tier: number; petIds: number[]; until: number } | null = null;
+let momentCooldown = 0;
+const cam = $('cam');
+/** เสนอจังหวะชัตเตอร์: ไอคอนกล้องเด้งที่มุมจอ 6 วินาที แตะทันได้รูป */
+function offerMoment(label: string, tier: number, petIds: number[], delayMs = 0) {
+  setTimeout(() => {
+    if (!g || moment || performance.now() < momentCooldown || pop.classList.contains('on') || scene.editMode) return;
+    moment = { label, tier, petIds, until: performance.now() + 6000 };
+    cam.classList.add('on');
+  }, delayMs);
+}
+cam.addEventListener('click', () => {
+  if (!g || !moment) return;
+  const m = moment; moment = null; cam.classList.remove('on');
+  momentCooldown = performance.now() + 20000;
+  const url = scene.snapshot();
+  const ph = addPhoto(g, m);
+  savePhoto(ph.id, url, g.social.album.map(p => p.id));
+  const fl = document.createElement('div'); fl.className = 'flash'; $('scr').appendChild(fl); setTimeout(() => fl.remove(), 500);
+  sfx.shutter();
+  toast(`📸 ${m.label} · เก็บเข้าอัลบั้มแล้ว (${TIER_TH[m.tier]})`, 2200);
+  saveGame(g);
+});
+let watchT = 15;
+/** หาจังหวะจากสิ่งที่น้องทำเองในฉาก */
+function momentWatch(dt: number) {
+  if (moment && performance.now() > moment.until) { moment = null; cam.classList.remove('on'); }
+  if (!g || (watchT -= dt) > 0) return;
+  watchT = 12 + Math.random() * 10;
+  const home = g.pets.filter(p => p.status === 'home');
+  const st = home.map(p => ({ p, s: scene.actorState(p.id) })).filter(x => x.s);
+  const rail = st.find(x => x.s!.perch === 2 && !x.s!.jumping);
+  const bench = st.find(x => x.s!.perch === 1 && !x.s!.jumping);
+  const sleep = st.find(x => x.s!.action === 'sleep');
+  if (st.length >= 2 && Math.abs(st[0].s!.x - st[1].s!.x) < 18) offerMoment('สองตัวอยู่ด้วยกัน', 1, [st[0].p.id, st[1].p.id]);
+  else if (rail) offerMoment('เดินบนราวระเบียง', 1, [rail.p.id]);
+  else if (bench) offerMoment('นั่งบนม้านั่ง', 0, [bench.p.id]);
+  else if (sleep) offerMoment(nightness(g.day) > 0.5 ? 'นอนหลับฝันดี' : 'งีบกลางวัน', 0, [sleep.p.id]);
+}
+
+function page() {
+  if (!g) return;
+  const s0 = g.social, left = postsLeft(g), hf = hourFactor(g.day);
+  const s = openPop(`${head('เพจบ้านน้อน')}
+    <div class="stats"><div><b>${fmtFans(s0.followers)}</b><small>ผู้ติดตาม</small></div><div><b>${fmtMoney(s0.earned)}${COIN}</b><small>รายได้รวม</small></div><div><b>${left}/${SOCIAL.postsPerDay}</b><small>โพสต์ได้วันนี้</small></div></div>
+    <p><small>${hf > 1 ? '✦ ตอนนี้หัวค่ำ คนดูเยอะ' : hf < 0.9 ? 'ตอนนี้ดึกแล้ว คนดูน้อย · โพสต์หัวค่ำดีกว่า' : 'โพสต์ช่วงหัวค่ำ (18–22 น.) คนดูเยอะกว่า'} · รูปเก่าคนสนใจน้อยลง</small></p>
+    <p class="sec">อัลบั้ม (${s0.album.length}/${SOCIAL.albumMax})</p>
+    ${s0.album.length ? `<div class="album">${[...s0.album].reverse().map(p => `<button data-ph="${p.id}"><img src="${photoUrl(p.id)}" alt="${p.label}" /><span class="tag">${TIER_TH[p.tier]}</span>${p.posted ? '<span class="done">โพสต์แล้ว</span>' : ''}</button>`).join('')}</div>`
+      : '<p>ยังไม่มีรูป · เมื่อน้องทำอะไรน่ารัก ไอคอนกล้องจะเด้งที่มุมจอ แตะให้ทันเพื่อถ่ายรูป</p>'}`, true);
+  s.querySelectorAll<HTMLElement>('[data-ph]').forEach(el => el.addEventListener('click', () => photoDetail(Number(el.dataset.ph))));
+}
+function photoDetail(id: number) {
+  if (!g) return;
+  const ph = g.social.album.find(p => p.id === id); if (!ph) return;
+  const fresh = Math.round(freshness(ph, g.day) * 100), left = postsLeft(g);
+  const s = openPop(`${head(ph.label)}<img class="photo-big" src="${photoUrl(id)}" alt="" />
+    <p><small>ระดับ ${TIER_TH[ph.tier]} · ความสด ${fresh}%${ph.sick ? ' · น้องดูไม่สบาย คนจะเป็นห่วง' : ''}</small></p>
+    <div class="btnrow">${ph.posted ? '<button class="cta" disabled>โพสต์แล้ว</button>' : `<button class="cta" id="post" ${left <= 0 ? 'disabled' : ''}>${left > 0 ? 'โพสต์ลงเพจ' : 'วันนี้โพสต์ครบแล้ว'}</button>`}
+    <a class="cta ghost" id="dl" download="baan-non-${id}.jpg" href="${photoUrl(id)}" style="text-align:center;text-decoration:none">บันทึกรูป</a></div>
+    <button class="cta ghost" id="back">กลับไปอัลบั้ม</button>`, true);
+  s.querySelector('#back')!.addEventListener('click', page);
+  s.querySelector('#post')?.addEventListener('click', () => {
+    const r = post(g!, id);
+    if (!r.ok) { toast(r.reason!); return; }
+    const res = r.r!;
+    sfx.buy();
+    const out = openPop(`${head('โพสต์แล้ว!')}<img class="photo-big" src="${photoUrl(id)}" alt="" />
+      <div class="stats"><div><b>${res.views.toLocaleString('th-TH')}</b><small>ยอดวิว</small></div><div><b>${res.fans >= 0 ? '+' : ''}${res.fans}</b><small>ผู้ติดตาม</small></div><div><b>+${res.coins}${COIN}</b><small>รายได้</small></div></div>
+      ${res.comments.map(c => `<div class="comment">💬 ${c}</div>`).join('')}
+      <button class="cta" id="ok">เยี่ยม</button>`, true);
+    out.querySelector('#ok')!.addEventListener('click', page);
+    saveGame(g!);
+  });
+}
+
 // ---------- เหตุการณ์จากเครื่องยนต์ ----------
 function handle(events: GameEvent[]) {
   for (const e of events) {
@@ -415,7 +497,7 @@ function handle(events: GameEvent[]) {
     const pet = g ? petById(g, e.petId) : undefined;
     if (e.type === 'sick') { toast(`${name} ไม่สบาย (${diseaseOf(e.disease).symptom}) พาไปคลินิกนะ`, 4500); sfx.alert(); if (pet) voice(pet, 'sad', 350); }
     else if (e.type === 'runaway') { toast(`${name} หนีไปอยู่บ้านป้าข้างบ้าน`, 4500); sfx.jingle(true); }
-    else if (e.type === 'stage') { toast(e.stage === 1 ? `${name} โตเป็นผู้ใหญ่แล้ว` : `${name} เริ่มแก่แล้ว`, 3500); sfx.grow(); if (pet) voice(pet, 'happy', 500); }
+    else if (e.type === 'stage') { toast(e.stage === 1 ? `${name} โตเป็นผู้ใหญ่แล้ว` : `${name} เริ่มแก่แล้ว`, 3500); sfx.grow(); if (pet) { voice(pet, 'happy', 500); offerMoment(e.stage === 1 ? 'โตเป็นผู้ใหญ่แล้ว' : 'วัยเก๋า', 2, [pet.id], 1500); } }
     else if (e.type === 'died') {
       sfx.jingle(true);
       openPop(`${head('ลาก่อน')}<p>${e.cause === 'age' ? `${name} จากไปอย่างสงบตามวัย` : `${name} จากไปเพราะไม่มีใครดูแล`}</p><p>น้องไปอยู่สวนสวรรค์สัตว์เลี้ยงแล้ว เปิดดูได้ในเมนู</p>`);
@@ -438,6 +520,7 @@ function renderHud() {
   $('ic-time').dataset.i = nightness(g.day) > 0.5 ? '5' : '4'; iconize($('ic-time'));
   $('time').textContent = `ฤดู${SEASONS[c.season]} วัน ${c.dayOfSeason} · ${hh}:${String(mm).padStart(2, '0')}`;
   $('money').textContent = fmtMoney(g.money);
+  $('fans').textContent = fmtFans(g.social.followers);
   const p = sel();
   $('hud').hidden = !p;
   if (p) {
@@ -452,7 +535,8 @@ function renderHud() {
   const dots: Record<string, boolean> = {
     feed: home.some(x => x.full < 0.35), bathe: home.some(x => x.clean < 0.3), train: home.some(x => canTrain(g!, x)),
     clinic: home.some(x => isSick(x) || (() => { const d = dueItems(x, g!.day); return d.vax.length + d.care.length > 0; })()),
-    shop: false, decor: g.items.some(i => { const f = furnitureOf(i.key); return i.x !== null && toiletCap(f) > 0 && i.fill >= toiletCap(f); }), page: false, menu: false,
+    page: g.social.album.some(p => !p.posted) && postsLeft(g) > 0,
+    shop: false, decor: g.items.some(i => { const f = furnitureOf(i.key); return i.x !== null && toiletCap(f) > 0 && i.fill >= toiletCap(f); }), menu: false,
   };
   document.querySelectorAll<HTMLElement>('#btns [data-act]').forEach(el => el.querySelector('.dot')!.classList.toggle('on', dots[el.dataset.act!]));
   // ป้ายเมื่อน้องไม่อยู่ / บ้านว่าง
@@ -518,6 +602,7 @@ function frame(now: number) {
     if ((hudT -= dt) <= 0) { hudT = 0.25; renderHud(); }
     if ((saveT -= dt) <= 0) { saveT = 5; saveGame(g); }
     chatter(dt);
+    momentWatch(dt);
   }
   requestAnimationFrame(frame);
 }

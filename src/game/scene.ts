@@ -210,6 +210,20 @@ export class Scene {
   }
 
   centerOn(id: number) { this.focusId = id; this.manualUntil = 0; }
+  /** สถานะน้องในฉาก (ใช้หาจังหวะชัตเตอร์) */
+  actorState(id: number) { const a = this.actors.get(id); return a ? { action: a.action, perch: a.perch, jumping: a.jump > 0, x: a.x } : null; }
+  /** ถ่ายรูปฉากตอนนี้ (สัดส่วนเท่าจอ) เป็น JPEG ขนาดเล็ก พร้อมลายน้ำ */
+  snapshot(): string {
+    const src = this.canvas, w = 240, h = Math.round((src.height / src.width) * w);
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const c = cv.getContext('2d')!;
+    c.imageSmoothingEnabled = true;
+    c.drawImage(src, 0, 0, w, h);
+    c.font = '13px Itim, sans-serif'; c.textAlign = 'right';
+    c.fillStyle = 'rgba(0,0,0,0.35)'; c.fillText('🐾 บ้านน้อน', w - 7, h - 7);
+    c.fillStyle = '#fff'; c.fillText('🐾 บ้านน้อน', w - 8, h - 8);
+    return cv.toDataURL('image/jpeg', 0.78);
+  }
 
   private sync(g: GameState) {
     const ids = new Set(g.pets.filter(p => p.status === 'home').map(p => p.id));

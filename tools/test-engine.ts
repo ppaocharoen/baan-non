@@ -3,6 +3,7 @@ import { BALANCE as B } from '../src/engine/balance';
 import { BREEDS, breedOf, FOODS } from '../src/engine/content';
 import { adopt, advance, bathe, canTrain, catchUpOffline, coax, feed, newGame, play, routineCare, tickOnline, train, treat, vaccinate, type GameState } from '../src/engine/core';
 import { buyFurniture, buySupply, cleanPoop, emptyToilet, placeItem, toiletFor } from '../src/engine/home';
+import { addPhoto, post, postsLeft, SOCIAL } from '../src/engine/social';
 import { diseaseOf, dueItems, HEALTH, vaccineState, vaccineOf, vaccinesFor } from '../src/engine/health';
 import { petStage } from '../src/engine/pet';
 import { nextRandom } from '../src/engine/rng';
@@ -203,6 +204,26 @@ function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew', protect =
   buyFurniture(g, 'ball'); placeItem(g, g.items[0].uid, 50);
   const b0 = p.bond; play(g, id);
   check('มีของเล่น เล่นได้ผูกพันมากขึ้น', near(p.bond - b0, B.bondPlay * 1.5));
+}
+
+// ---- เพจบ้านน้อน ----
+{
+  const { g, id } = setup('normal', 'bangkaew', true);
+  const p = g.pets[0];
+  const a = addPhoto(g, { tier: 1, label: 'กินข้าว', petIds: [id] }), b = addPhoto(g, { tier: 0, label: 'นอน', petIds: [id] }), c = addPhoto(g, { tier: 0, label: 'เล่น', petIds: [id] });
+  const m0 = g.money;
+  const r1 = post(g, a.id);
+  check('โพสต์ได้ยอดวิว ผู้ติดตาม เงิน', r1.ok && r1.r!.views > 0 && g.social.followers > 0 && g.money > m0);
+  check('โพสต์รูปเดิมซ้ำไม่ได้', !post(g, a.id).ok);
+  post(g, b.id);
+  check(`วันละ ${SOCIAL.postsPerDay} โพสต์`, postsLeft(g) === 0 && !post(g, c.id).ok);
+  advance(g, 1); tidy(g);
+  check('ข้ามวันโพสต์ได้อีก', postsLeft(g) === SOCIAL.postsPerDay);
+  for (let i = 0; i < 20; i++) addPhoto(g, { tier: 0, label: 'x' + i, petIds: [id] });
+  check('อัลบั้มเต็มทิ้งรูปเก่า', g.social.album.length === SOCIAL.albumMax);
+  g.social.followers = 1000; p.health.disease = 'skin';
+  const sickPh = addPhoto(g, { tier: 1, label: 'ป่วย', petIds: [id] });
+  check('รูปน้องป่วย ผู้ติดตามลด', sickPh.sick && post(g, sickPh.id).r!.fans < 0 && g.social.followers < 1000);
 }
 
 // ---- เซฟเป็น JSON ได้ และเล่นต่อได้ผลเดิม ----

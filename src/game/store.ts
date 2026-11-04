@@ -1,6 +1,7 @@
 // เก็บเซฟและการตั้งค่าใน localStorage (รหัสเซฟ/export มาในขั้น 6)
 import { SAVE_VERSION, type GameState } from '../engine/core';
 import { newHealth } from '../engine/health';
+import { newSocial } from '../engine/social';
 
 const SAVE_KEY = 'baan-non-save';
 const SETTINGS_KEY = 'baan-non-settings';
@@ -36,6 +37,11 @@ function migrate(g: any): GameState | null {
     for (const p of g.pets ?? []) { p.poopIn ??= -1; p.shampooUntil ??= -1; }
     g.v = 3;
   }
+  if (g.v === 3) { // v3 → v4: เพจบ้านน้อน (ให้เงินชดเชยรายได้ชั่วคราวที่หายไป)
+    g.social ??= newSocial();
+    g.money = (g.money ?? 0) + 150;
+    g.v = 4;
+  }
   return g as GameState;
 }
 
@@ -47,3 +53,14 @@ export function loadSettings(): Settings {
   try { return { ...def, ...JSON.parse(get(SETTINGS_KEY) ?? '{}') }; } catch { return def; }
 }
 export const saveSettings = (s: Settings) => set(SETTINGS_KEY, JSON.stringify(s));
+
+// ---------- รูปในอัลบั้ม (เก็บแยกจากเซฟ เพราะขนาดใหญ่) ----------
+const PHOTO_KEY = 'baan-non-photos';
+function photos(): Record<string, string> { try { return JSON.parse(get(PHOTO_KEY) ?? '{}'); } catch { return {}; } }
+export const photoUrl = (id: number) => photos()[id] ?? '';
+export function savePhoto(id: number, url: string, keep: number[]) {
+  const all = photos(), out: Record<string, string> = {};
+  for (const k of keep) if (all[k]) out[k] = all[k];
+  out[id] = url;
+  set(PHOTO_KEY, JSON.stringify(out));
+}

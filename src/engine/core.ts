@@ -6,9 +6,10 @@ import { nextRandom } from './rng';
 import { offlineDays, onlineDays } from './time';
 import { careOf, diseaseOf, diseaseRisks, HEALTH, newHealth, vaccineOf, vaccineState, careState } from './health';
 import { digest, floorMess, hasToy, HYGIENE, stepHome, useSupply, type HomeItem, type Poop, type PoopEvent } from './home';
+import { newSocial, passiveIncome, type SocialState } from './social';
 import { decayPet, isPostVax, isSick, petAge, petStage, type Grave, type Pet } from './pet';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 export interface GameState {
   v: number;
@@ -28,6 +29,8 @@ export interface GameState {
   /** อึบนพื้น */
   poops: Poop[];
   nextUid: number;
+  /** เพจบ้านน้อน */
+  social: SocialState;
   /** เวลาจริง (ms) ที่เดินเวลาล่าสุด — ใช้คิดเวลาตอนปิดเกม */
   lastReal: number;
 }
@@ -45,7 +48,7 @@ const fail = (reason: string): Result => ({ ok: false, reason });
 const OK: Result = { ok: true };
 
 export function newGame(mode: Mode, seed: number, nowMs: number): GameState {
-  return { v: SAVE_VERSION, mode, rng: seed >>> 0, day: B.startDay, money: B.startMoney, pets: [], heaven: [], nextId: 1, items: [], supplies: {}, poops: [], nextUid: 1, lastReal: nowMs };
+  return { v: SAVE_VERSION, mode, rng: seed >>> 0, day: B.startDay, money: B.startMoney, pets: [], heaven: [], nextId: 1, items: [], supplies: {}, poops: [], nextUid: 1, social: newSocial(), lastReal: nowMs };
 }
 
 export const petById = (g: GameState, id: number) => g.pets.find(p => p.id === id);
@@ -63,7 +66,7 @@ export function advance(g: GameState, days: number, offline = false): GameEvent[
     const before = g.day;
     g.day += dt;
     if (Math.floor(g.day) > Math.floor(before)) events.push({ type: 'newDay', day: Math.floor(g.day) });
-    if (g.pets.length) g.money += B.tempIncomePerDay * dt; // ชั่วคราว (ขั้น 5 แทนด้วยช่องโซเชียล)
+    passiveIncome(g, dt); // รายได้โฆษณาจากโพสต์เก่าบนเพจ
     for (const p of [...g.pets]) stepPet(g, p, dt, needsMult, events);
   }
   return events;

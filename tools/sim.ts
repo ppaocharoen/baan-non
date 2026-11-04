@@ -11,6 +11,7 @@ import { adopt, bathe, canTrain, catchUpOffline, coax, feed, newGame, play, rout
 import { careFor, dueItems, vaccinesFor } from '../src/engine/health';
 import { buyFurniture, buySupply, cleanPoop, emptyToilet, furnitureOf, placeItem } from '../src/engine/home';
 import { breedOf } from '../src/engine/content';
+import { addPhoto, post, postsLeft } from '../src/engine/social';
 import { isSick, type Pet } from '../src/engine/pet';
 import { nextRandom } from '../src/engine/rng';
 import { realHoursOffline } from '../src/engine/time';
@@ -70,6 +71,18 @@ function careSession(g: GameState, now: number, minutes: number, rngHits: { rng:
     if (m % 10 === 9) doCare();
   }
   return sick;
+}
+
+/** ผู้เล่นดูแลดีถ่ายรูปตามจังหวะชัตเตอร์ แล้วโพสต์รูปที่ดีที่สุด */
+function socialSession(g: GameState, r: { rng: number }) {
+  const n = 2 + Math.floor(nextRandom(r) * 2);
+  const labels = ['นอนหลับ', 'กินข้าว', 'เล่น', 'บนม้านั่ง', 'อาบน้ำ'];
+  for (let i = 0; i < n && g.pets.length; i++) addPhoto(g, { tier: nextRandom(r) < 0.35 ? 1 : 0, label: labels[Math.floor(nextRandom(r) * labels.length)], petIds: [g.pets[0].id] });
+  while (postsLeft(g) > 0) {
+    const best = g.social.album.filter(p => !p.posted).sort((a, b) => b.score - a.score)[0];
+    if (!best) break;
+    post(g, best.id);
+  }
 }
 
 // ---------- เป้า 1: ดูแลปกติไม่ป่วย + รายงานอายุขัยเป็นวันจริง ----------
@@ -189,7 +202,36 @@ function careSession(g: GameState, now: number, minutes: number, rngHits: { rng:
   console.log(`   ขับถ่าย หมา/แมวที่มีห้องน้ำ (วัยเด็ก ยังไม่ฝึก): เข้าห้องน้ำ ${Math.round(toilet / (toilet + floor) * 100)}% · บนพื้น ${Math.round(floor / (toilet + floor) * 100)}%`);
 }
 
-console.log('… 4. ผู้ติดตามไม่โตทวีคูณ — รอขั้น 5 (ช่องโซเชียล)');
+// ---------- เป้า 4–5: เพจ — ผู้ติดตามไม่โตทวีคูณ · เงินพอใช้ดูแลน้อง (เริ่มจากเงินตั้งต้นจริง) ----------
+{
+  const SESSIONS: [number, number][] = [[8, 15], [12.5, 10], [20, 30]];
+  const fans15: number[] = [], fans30: number[] = [], fans60: number[] = [], money: number[] = [];
+  let broke = 0, runs = 0;
+  for (let seed = 1; seed <= 30; seed++) for (const br of BREEDS) {
+    const { g } = fresh('normal', seed * 31 + 7, br.key);
+    g.money = B.startMoney - (g.items.length ? 0 : 0); // เงินจริง (ห้องน้ำซื้อไปแล้วใน fresh ด้วยเงินไม่จำกัด)
+    const r = { rng: seed }, hits = { rng: seed + 99 };
+    let minMoney = Infinity;
+    for (let d = 0; d < 60; d++) {
+      if (!g.pets.length) adopt(g, br.key, 'น้อน', 0);
+      for (const [h, mins] of SESSIONS) {
+        careSession(g, d * 24 * H + h * H, mins, hits);
+        socialSession(g, r);
+        minMoney = Math.min(minMoney, g.money);
+      }
+      if (d === 14) fans15.push(g.social.followers);
+      if (d === 29) fans30.push(g.social.followers);
+    }
+    fans60.push(g.social.followers); money.push(g.money);
+    if (minMoney < 0) broke++;
+    runs++;
+  }
+  const avg = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
+  const g1 = avg(fans15), g2 = avg(fans30) - avg(fans15), g3 = avg(fans60) - avg(fans30);
+  goal('4. ผู้ติดตามไม่โตทวีคูณ', g3 / 30 < (g2 / 15) * 1.2 && g2 / 15 < g1 / 15 * 1.6,
+    `เฉลี่ยวันละ +${(g1 / 15).toFixed(0)} (วัน 1–15) · +${(g2 / 15).toFixed(0)} (16–30) · +${(g3 / 30).toFixed(0)} (31–60) · ครบ 60 วัน ${avg(fans60).toFixed(0)} คน`);
+  goal('5. ผู้เล่นดูแลดีมีเงินพอ (ไม่ติดลบ)', broke === 0, `${runs} รอบ ติดลบ ${broke} · เงินเฉลี่ยตอนจบ ${avg(money).toFixed(0)}`);
+}
 
 if (failed) {
   console.error(`${strict ? '❌' : '⚠'} sim ไม่ผ่าน ${failed} เป้า`);

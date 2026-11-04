@@ -56,8 +56,6 @@ export const BALANCE = {
 
   // ---- เงิน (ชั่วคราว จนกว่าจะมีช่องโซเชียลในขั้น 5) ----
   startMoney: 300,
-  /** รายได้ชั่วคราวต่อวันในเกม — ลบออกเมื่อมีช่องโซเชียล (ขั้น 5) */
-  tempIncomePerDay: 14,
   adoptPrice: 200,
   coaxCost: 60,
   maxPets: 2,

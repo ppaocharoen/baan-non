@@ -116,3 +116,21 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .ic2.sm { width: 18px; height: 14px; }
 .coin { width: 16px; height: 16px; image-rendering: pixelated; vertical-align: -3px; margin-left: 2px; }
 .chip .coin { margin: 0; }
+.cam { position: absolute; right: 8px; top: 8px; width: 46px; height: 46px; border-radius: 50%; background: #FAC775; border: 3px solid #633806; display: none;
+  align-items: center; justify-content: center; animation: campulse 0.9s ease-in-out infinite; }
+.cam.on { display: flex; }
+.cam .ic2 { width: 32px; height: 25px; }
+@keyframes campulse { 50% { transform: scale(1.12); } }
+.flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; animation: flash .45s ease-out; }
+@keyframes flash { 0% { opacity: .9; } 100% { opacity: 0; } }
+.album { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.album button { position: relative; padding: 0; border: 2px solid var(--lcd-ink); border-radius: 6px; overflow: hidden; aspect-ratio: 240 / 330; background: #000; }
+.album img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.album .tag { position: absolute; left: 3px; bottom: 3px; background: var(--lcd-ink); color: var(--lcd); font-size: 11px; padding: 1px 5px; border-radius: 4px; }
+.album .done { position: absolute; right: 3px; top: 3px; background: #EF9F27; color: #412402; font-size: 11px; padding: 1px 5px; border-radius: 4px; }
+.photo-big { width: 100%; border: 2px solid var(--lcd-ink); border-radius: 8px; display: block; }
+.stats { display: flex; justify-content: space-around; text-align: center; margin: 4px 0 8px; }
+.stats b { display: block; font-size: 20px; font-weight: 400; }
+.stats small { font-size: 12px; opacity: .75; }
+.comment { background: color-mix(in srgb, var(--lcd-ink) 10%, transparent); border-radius: 10px; padding: 6px 10px; margin: 4px 0; font-size: 14px; }
+.btnrow { display: flex; gap: 6px; } .btnrow .cta { flex: 1; }
