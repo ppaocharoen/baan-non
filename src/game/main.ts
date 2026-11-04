@@ -13,6 +13,7 @@ import { Scene } from './scene';
 import { clearGame, loadGame, loadSettings, saveGame, saveSettings } from './store';
 import { applyTheme, THEMES } from './themes';
 import { runTraining } from './train';
+import { petPitch, sfx } from './sound';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -22,6 +23,14 @@ const SPEED = Math.max(1, Number(params.get('speed')) || 1);
 let g: GameState | null = loadGame();
 const settings = loadSettings();
 applyTheme(settings.theme);
+sfx.enabled = settings.sound;
+// เบราว์เซอร์อนุญาตให้เล่นเสียงหลังผู้เล่นแตะจอครั้งแรก
+document.addEventListener('pointerdown', () => sfx.unlock(), { capture: true });
+const voice = (p: Pet, mood: 'happy' | 'normal' | 'sad' = 'normal', delayMs = 0) => {
+  if (!g) return;
+  const st = petStage(p, g.day);
+  setTimeout(() => sfx.voice(breedOf(p.breed), petPitch(p.id, st), mood), delayMs);
+};
 let selId: number | null = null;
 
 // ---------- ไอคอนปุ่มจากชีตไอเทม ----------
@@ -34,11 +43,11 @@ for (const el of document.querySelectorAll<HTMLElement>('.ic')) {
 // ---------- ฉาก ----------
 const scene = new Scene($<HTMLCanvasElement>('scene'), {
   onTapPet: id => { select(id); doPlay(id); },
-  onHoldPet: id => { select(id); showStatus(id); },
+  onHoldPet: id => { select(id); const p = g && petById(g, id); if (p) voice(p); showStatus(id); },
 });
 
 // สำหรับทดสอบอัตโนมัติ
-(window as unknown as { __bn: unknown }).__bn = { scene, get g() { return g; } };
+(window as unknown as { __bn: unknown }).__bn = { scene, sfx, BREEDS, get g() { return g; } };
 
 // ---------- ตัวช่วย ----------
 const sel = (): Pet | undefined => (g && selId !== null ? petById(g, selId) : undefined);
@@ -65,11 +74,12 @@ const pop = $('pop'), sheet = $('sheet');
 function openPop(html: string, full = false) {
   sheet.innerHTML = html;
   pop.classList.toggle('full', full);
+  if (!pop.classList.contains('on')) sfx.open();
   pop.classList.add('on');
   sheet.querySelector<HTMLElement>('.x')?.addEventListener('click', closePop);
   return sheet;
 }
-function closePop() { pop.classList.remove('on'); sheet.innerHTML = ''; }
+function closePop() { if (pop.classList.contains('on')) sfx.close(); pop.classList.remove('on'); sheet.innerHTML = ''; }
 pop.addEventListener('click', e => { if (e.target === pop && g) closePop(); });
 const head = (title: string, closable = true) => `<h3><span>${title}</span>${closable ? '<button class="x" aria-label="ปิด">✕</button>' : ''}</h3>`;
 
@@ -111,6 +121,7 @@ function welcome() {
       const r = adopt(g, breed, name);
       selId = r.pet!.id; scene.centerOn(selId);
       saveGame(g); closePop();
+      sfx.jingle(); voice(r.pet!, 'happy', 700);
       toast(`${name} มาอยู่บ้านแล้ว แตะน้องเพื่อเล่นด้วย`);
     }, false);
   }));
@@ -127,8 +138,9 @@ function need(): Pet | undefined {
 function doPlay(id: number) {
   if (!g) return;
   const r = play(g, id);
-  if (!r.ok) { toast(r.reason!); return; }
+  if (!r.ok) { toast(r.reason!); const p = petById(g, id); if (p) voice(p); return; }
   scene.react(id, 'happy'); floatAt(id, '♥');
+  const p = petById(g, id); if (p) voice(p, 'happy');
 }
 function doFeed() {
   const p = need(); if (!p || !g) return;
@@ -138,6 +150,7 @@ function doFeed() {
     closePop();
     if (!r.ok) { toast(r.reason!); return; }
     scene.react(p.id, 'eat', el.dataset.f!); floatAt(p.id, '😋');
+    sfx.munch(); voice(p, 'happy', 900);
   }));
 }
 let batheWarnUntil = 0;
@@ -149,7 +162,9 @@ function doBathe() {
     toast('เพิ่งฉีดวัคซีน ควรงดอาบน้ำ 1–2 วัน · กดอีกครั้งถ้าจะอาบจริง', 4000); return;
   }
   const r = bathe(g, p.id); scene.react(p.id, 'happy'); floatAt(p.id, '🫧');
-  if (r.fever) toast(`${p.name} ตัวรุมๆ เป็นไข้หลังฉีดวัคซีน พาไปคลินิกนะ`, 4500);
+  sfx.bubbles();
+  if (r.fever) { toast(`${p.name} ตัวรุมๆ เป็นไข้หลังฉีดวัคซีน พาไปคลินิกนะ`, 4500); voice(p, 'sad', 900); }
+  else voice(p, 'happy', 700);
 }
 function doTrain() {
   const p = need(); if (!p || !g) return;
@@ -160,7 +175,7 @@ function doTrain() {
     const before = p.trained;
     train(g!, p.id, hits); closePop();
     toast(hits ? `${p.name} เก่งขึ้น +${Math.round((p.trained - before) * 100)}%` : 'รอบนี้พลาดหมด ไว้ลองใหม่สัปดาห์หน้า');
-    if (hits) { scene.react(p.id, 'happy'); floatAt(p.id, '★'); }
+    if (hits) { scene.react(p.id, 'happy'); floatAt(p.id, '★'); voice(p, 'happy'); }
   });
 }
 function stateText(st: ItemState, series = 1): string {
@@ -190,15 +205,16 @@ function doClinic() {
   const after = (r: { ok: boolean; reason?: string }, msg: string) => { if (!r.ok) toast(r.reason!); else toast(msg); doClinic(); };
   s.querySelector('#treat')?.addEventListener('click', () => {
     const r = treat(g!, p.id);
-    if (r.ok) scene.react(p.id, 'happy');
+    if (r.ok) { scene.react(p.id, 'happy'); sfx.coin(); voice(p, 'happy', 400); }
     after(r, `${p.name} หายป่วยแล้ว`);
   });
-  s.querySelectorAll<HTMLElement>('[data-v]').forEach(el => el.addEventListener('click', () => after(vaccinate(g!, p.id, el.dataset.v!), 'ฉีดแล้ว น้องอาจซึม 1–2 วัน ควรงดอาบน้ำก่อน')));
-  s.querySelectorAll<HTMLElement>('[data-c]').forEach(el => el.addEventListener('click', () => after(routineCare(g!, p.id, el.dataset.c!), 'เรียบร้อย')));
+  s.querySelectorAll<HTMLElement>('[data-v]').forEach(el => el.addEventListener('click', () => { sfx.syringe(); voice(p, 'sad', 250); after(vaccinate(g!, p.id, el.dataset.v!), 'ฉีดแล้ว น้องอาจซึม 1–2 วัน ควรงดอาบน้ำก่อน'); }));
+  s.querySelectorAll<HTMLElement>('[data-c]').forEach(el => el.addEventListener('click', () => { sfx.coin(); after(routineCare(g!, p.id, el.dataset.c!), 'เรียบร้อย'); }));
   s.querySelector('#all')?.addEventListener('click', () => {
     let ok = true;
     for (const v of due.vax) ok = vaccinate(g!, p.id, v.key).ok && ok;
     for (const c of due.care) ok = routineCare(g!, p.id, c.key).ok && ok;
+    if (due.vax.length) { sfx.syringe(); voice(p, 'sad', 250); } else sfx.coin();
     after({ ok }, due.vax.length ? 'ครบแล้ว น้องอาจซึม 1–2 วัน ควรงดอาบน้ำก่อน' : 'เรียบร้อย');
   });
 }
@@ -219,15 +235,21 @@ function menu() {
   if (!g) return;
   const s = openPop(`${head('เมนู')}
     <button class="opt" id="m-theme"><span>สีตัวเครื่อง</span>›</button>
+    <button class="opt" id="m-sound"><span>เสียง</span><span>${settings.sound ? 'เปิด' : 'ปิด'}</span></button>
     <button class="opt" id="m-adopt" ${g.pets.length >= B.maxPets ? 'disabled' : ''}><span>รับน้องเพิ่ม<br><small>${g.pets.length >= B.maxPets ? `บ้านนี้เลี้ยงได้ ${B.maxPets} ตัว` : `ค่ารับเลี้ยง ${B.adoptPrice} 🪙`}</small></span>›</button>
     <button class="opt" id="m-heaven"><span>สวนสวรรค์สัตว์เลี้ยง<br><small>${g.heaven.length} ตัว</small></span>›</button>
     <button class="opt" id="m-info"><span>เกี่ยวกับเกม<br><small>โหมด${g.mode === 'hard' ? 'เข้ม' : 'ปกติ'}</small></span>›</button>
     <button class="opt" id="m-reset"><span>เริ่มเกมใหม่</span>›</button>`);
   s.querySelector('#m-theme')!.addEventListener('click', themePicker);
+  s.querySelector('#m-sound')!.addEventListener('click', e => {
+    settings.sound = !settings.sound; sfx.enabled = settings.sound; saveSettings(settings);
+    (e.currentTarget as HTMLElement).lastElementChild!.textContent = settings.sound ? 'เปิด' : 'ปิด';
+    if (settings.sound) sfx.ding();
+  });
   s.querySelector('#m-adopt')!.addEventListener('click', () => chooseBreed('รับน้องเพิ่ม', B.adoptPrice, (breed, name) => {
     const r = adopt(g!, breed, name, B.adoptPrice); closePop();
     if (!r.ok) { toast(r.reason!); return; }
-    select(r.pet!.id); toast(`${name} มาอยู่บ้านแล้ว`);
+    select(r.pet!.id); toast(`${name} มาอยู่บ้านแล้ว`); sfx.jingle(); voice(r.pet!, 'happy', 700);
   }));
   s.querySelector('#m-heaven')!.addEventListener('click', () => openPop(`${head('สวนสวรรค์สัตว์เลี้ยง')}${g!.heaven.length ? g!.heaven.map(h => `<div class="row"><span>${h.name} · ${breedOf(h.breed).name}</span><span>${Math.floor(h.ageDays)} วัน</span></div>`).join('') : '<p>ยังไม่มีน้องตัวไหนจากไป</p>'}`, true));
   s.querySelector('#m-info')!.addEventListener('click', () => openPop(`${head('บ้านน้อน · Baan Non: Klong Life')}<p>เกมเลี้ยงน้องหมา แมว นก ในเรือนไทยริมคลอง</p><p>ตอนปิดเกม เวลายังเดินแต่ช้าลงมาก น้องหิวช้าลงด้วย</p><p><small>เวอร์ชันทดลอง v0.1 · กำลังสร้าง</small></p>`));
@@ -251,7 +273,7 @@ const ACTIONS: Record<string, () => void> = {
   album: () => soon('อัลบั้ม', 'เก็บรูปจากจังหวะชัตเตอร์ แล้วเลือกไปโพสต์ลงเพจ'),
   page: () => soon('เพจบ้านน้อน', 'ช่องโซเชียลของน้อง โพสต์รูป หาผู้ติดตาม และรายได้จากโฆษณา'),
 };
-document.querySelectorAll<HTMLElement>('#btns [data-act]').forEach(el => el.addEventListener('click', () => { if (g) ACTIONS[el.dataset.act!](); }));
+document.querySelectorAll<HTMLElement>('#btns [data-act]').forEach(el => el.addEventListener('click', () => { sfx.click(); if (g) ACTIONS[el.dataset.act!](); }));
 $('hud').addEventListener('click', () => { const p = sel(); if (p) showStatus(p.id); });
 const cycle = (d: number) => {
   if (!g || !g.pets.length) return;
@@ -269,10 +291,12 @@ function handle(events: GameEvent[]) {
   for (const e of events) {
     if (e.type === 'newDay') continue;
     const name = nameOf(e.petId);
-    if (e.type === 'sick') toast(`${name} ไม่สบาย (${diseaseOf(e.disease).symptom}) พาไปคลินิกนะ`, 4500);
-    else if (e.type === 'runaway') toast(`${name} หนีไปอยู่บ้านป้าข้างบ้าน`, 4500);
-    else if (e.type === 'stage') toast(e.stage === 1 ? `${name} โตเป็นผู้ใหญ่แล้ว` : `${name} เริ่มแก่แล้ว`, 3500);
+    const pet = g ? petById(g, e.petId) : undefined;
+    if (e.type === 'sick') { toast(`${name} ไม่สบาย (${diseaseOf(e.disease).symptom}) พาไปคลินิกนะ`, 4500); sfx.alert(); if (pet) voice(pet, 'sad', 350); }
+    else if (e.type === 'runaway') { toast(`${name} หนีไปอยู่บ้านป้าข้างบ้าน`, 4500); sfx.jingle(true); }
+    else if (e.type === 'stage') { toast(e.stage === 1 ? `${name} โตเป็นผู้ใหญ่แล้ว` : `${name} เริ่มแก่แล้ว`, 3500); sfx.grow(); if (pet) voice(pet, 'happy', 500); }
     else if (e.type === 'died') {
+      sfx.jingle(true);
       openPop(`${head('ลาก่อน')}<p>${e.cause === 'age' ? `${name} จากไปอย่างสงบตามวัย` : `${name} จากไปเพราะไม่มีใครดูแล`}</p><p>น้องไปอยู่สวนสวรรค์สัตว์เลี้ยงแล้ว เปิดดูได้ในเมนู</p>`);
       if (selId === e.petId) selId = null;
     }
@@ -318,7 +342,7 @@ function renderHud() {
       banner.querySelector('button')!.addEventListener('click', () => {
         const r = coax(g!, p.id);
         if (!r.ok) { toast(r.reason!); return; }
-        toast(`${p.name} ยอมกลับบ้านแล้ว แต่ยังงอนอยู่`); delete banner.dataset.away;
+        toast(`${p.name} ยอมกลับบ้านแล้ว แต่ยังงอนอยู่`); delete banner.dataset.away; voice(p, 'normal');
       });
     }
     banner.classList.add('on');
@@ -352,7 +376,16 @@ const hideSplash = () => { splash.classList.add('out'); setTimeout(() => splash.
 const splashTimer = setTimeout(hideSplash, 1800);
 splash.addEventListener('click', () => { clearTimeout(splashTimer); hideSplash(); });
 
-let last = performance.now(), hudT = 0, saveT = 0;
+let last = performance.now(), hudT = 0, saveT = 0, chatterT = 40;
+/** น้องส่งเสียงเองเป็นครั้งคราว · ป่วยจะครางเบาๆ บ่อยกว่า */
+function chatter(dt: number) {
+  if (!g || (chatterT -= dt) > 0) return;
+  const home = g.pets.filter(x => x.status === 'home');
+  const sick = home.filter(isSick);
+  chatterT = sick.length ? 18 + Math.random() * 12 : 50 + Math.random() * 70;
+  const p = (sick.length ? sick : home)[Math.floor(Math.random() * (sick.length || home.length))];
+  if (p && nightness(g.day) < 0.6) voice(p, isSick(p) ? 'sad' : 'normal');
+}
 function frame(now: number) {
   const dt = Math.min(0.25, (now - last) / 1000); last = now;
   if (g) {
@@ -361,13 +394,14 @@ function frame(now: number) {
     scene.draw(g);
     if ((hudT -= dt) <= 0) { hudT = 0.25; renderHud(); }
     if ((saveT -= dt) <= 0) { saveT = 5; saveGame(g); }
+    chatter(dt);
   }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 document.addEventListener('visibilitychange', () => {
   if (!g) return;
-  if (document.hidden) saveGame(g);
+  if (document.hidden) { saveGame(g); sfx.suspend(); }
   else { resume(); last = performance.now(); }
 });
 window.addEventListener('pagehide', () => { if (g) saveGame(g); });

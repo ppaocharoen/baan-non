@@ -1,5 +1,6 @@
 // มินิเกมฝึก: แถบมีเครื่องหมายวิ่งไปมา แตะให้ตรงโซนเขียว 5 ครั้ง ทำครบก็จบ
 import { BALANCE as B } from '../engine/balance';
+import { sfx } from './sound';
 
 export function runTraining(host: HTMLElement, petName: string, onDone: (hits: number) => void) {
   host.innerHTML = `
@@ -32,6 +33,7 @@ export function runTraining(host: HTMLElement, petName: string, onDone: (hits: n
     if (done) return;
     const ok = pos >= z0 && pos <= z1;
     marks.push(ok); if (ok) hits++; n++;
+    if (ok) sfx.ding(); else sfx.miss();
     render();
     if (n >= B.trainTaps) {
       done = true; cancelAnimationFrame(raf);
