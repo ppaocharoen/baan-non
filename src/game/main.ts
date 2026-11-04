@@ -346,6 +346,12 @@ if (g) {
   if (g.pets.length) select(g.pets[0].id);
 } else welcome();
 
+// โลโก้ตอนเข้าเกม แล้วค่อยๆ จางเป็นหน้าเกม (แตะเพื่อข้าม)
+const splash = $('splash');
+const hideSplash = () => { splash.classList.add('out'); setTimeout(() => splash.remove(), 800); };
+const splashTimer = setTimeout(hideSplash, 1800);
+splash.addEventListener('click', () => { clearTimeout(splashTimer); hideSplash(); });
+
 let last = performance.now(), hudT = 0, saveT = 0;
 function frame(now: number) {
   const dt = Math.min(0.25, (now - last) / 1000); last = now;

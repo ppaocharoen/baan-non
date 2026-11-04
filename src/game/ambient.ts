@@ -1,17 +1,7 @@
-// ความเคลื่อนไหวในฉาก: กระถางแขวนแกว่ง ยอดมะพร้าวไหว ใบไม้ปลิว นกบินผ่าน แสงระยิบบนคลอง หิ่งห้อยตอนกลางคืน
+// ความเคลื่อนไหวในฉาก: ใบไม้ปลิว นกบินผ่าน แสงระยิบบนคลอง หิ่งห้อยตอนกลางคืน
+// (เอากระถาง/ต้นไม้ไหวออก — เลื่อนภาพฉากเป็นแถบแล้วไม่เนียน ถ้าจะทำต้องเจนกระถางแยกเป็นสไปรต์)
 // พิกัดทั้งหมดอ้างอิงภาพฉาก bg_home_*.png (กว้าง 480) แล้วแปลงเป็นพิกัดโลกด้วย s
 
-/** บริเวณที่แกว่ง: [x, y, w, h] ในพิกัดภาพ · pivot = จุดยึด (top = แขวน, bottom = ต้นไม้) */
-interface Sway { r: [number, number, number, number]; pivot: 'top' | 'bottom'; amp: number; speed: number; phase: number; }
-const SWAYS: Sway[] = [
-  { r: [133, 84, 52, 72], pivot: 'top', amp: 1.6, speed: 1.1, phase: 0 },     // กระถางกล้วยไม้แขวน ซ้าย
-  { r: [183, 86, 34, 58], pivot: 'top', amp: 1.4, speed: 1.3, phase: 1.7 },   // กระถางแขวน กลาง
-  { r: [436, 36, 44, 80], pivot: 'top', amp: 1.2, speed: 0.9, phase: 0.6 },   // ตะกร้าแขวน ขวาบน
-  { r: [214, 22, 54, 62], pivot: 'bottom', amp: 1.8, speed: 0.7, phase: 0.3 },// ยอดมะพร้าว
-  { r: [272, 52, 40, 40], pivot: 'bottom', amp: 1.4, speed: 0.8, phase: 2.1 },// ยอดมะพร้าวหลัง
-  { r: [338, 0, 104, 44], pivot: 'top', amp: 1.2, speed: 0.6, phase: 1.1 },   // ใบไม้มุมขวาบน
-  { r: [412, 96, 60, 84], pivot: 'top', amp: 1.0, speed: 0.75, phase: 2.6 },  // กล้วยไม้ขวา
-];
 const WATER = { x0: 322, x1: 436, y0: 168, y1: 204 };     // ผิวคลองที่เห็น
 const FIREFLY = { x0: 120, x1: 470, y0: 140, y1: 250 };
 const LEAF_SRC = { x0: 330, x1: 470, y0: 0, y1: 40 };
@@ -64,25 +54,8 @@ export class Ambient {
   }
 
   /** วาดชั้นหลัง (ทับภาพฉาก ก่อนวาดน้อง) — ctx อยู่ในพิกัดโลกแล้ว */
-  drawBack(c: CanvasRenderingContext2D, o: { camX: number; s: number; rx: (v: number) => number; day: HTMLImageElement; night: HTMLImageElement; n: number; ready: (i: HTMLImageElement) => boolean }) {
+  drawBack(c: CanvasRenderingContext2D, o: { camX: number; s: number; rx: (v: number) => number; n: number }) {
     const { camX, s, rx } = o;
-    // ส่วนที่แกว่ง: วาดภาพฉากซ้ำเป็นแถบแนวนอน เลื่อนแต่ละแถบตามระยะจากจุดยึด (ปัดลงพิกเซลภาพ)
-    const band = 2, k = o.day.naturalWidth / 480; // เผื่อภาพฉากขนาดอื่น
-    for (const sw of SWAYS) {
-      const [x, y, w, h] = sw.r, a = Math.sin(this.t * sw.speed + sw.phase);
-      for (let yy = 0; yy < h; yy += band) {
-        const f = sw.pivot === 'top' ? (yy + band) / h : 1 - yy / h;
-        const dxPx = Math.round(a * sw.amp * f);
-        if (!dxPx) continue;
-        const dx = (x + dxPx) * s - camX, dy = (y + yy) * s;
-        for (const [im, alpha] of [[o.day, 1], [o.night, o.n]] as const) {
-          if (alpha <= 0 || !o.ready(im)) continue;
-          c.globalAlpha = alpha;
-          c.drawImage(im, x * k, (y + yy) * k, w * k, band * k, rx(dx), rx(dy), rx(w * s), rx(band * s) + 0.01);
-        }
-        c.globalAlpha = 1;
-      }
-    }
     // แสงระยิบบนน้ำ
     for (const g of this.glints) {
       c.fillStyle = `rgba(255,255,230,${Math.min(1, g.life) * (0.55 - o.n * 0.3)})`;

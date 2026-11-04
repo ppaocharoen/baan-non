@@ -203,7 +203,7 @@ export class Scene {
     drawBg(this.bgDay, 1);
     drawBg(this.bgNight, n);
     const s = ready(this.bgDay) ? WORLD_H / this.bgDay.naturalHeight : 0.52;
-    this.ambient.drawBack(c, { camX: this.camX, s, rx: this.rx, day: this.bgDay, night: this.bgNight, n, ready });
+    this.ambient.drawBack(c, { camX: this.camX, s, rx: this.rx, n });
 
     this.boxes.clear();
     const order = g.pets.filter(p => this.actors.has(p.id)).sort((a, b) => this.actors.get(a.id)!.x - this.actors.get(b.id)!.x);

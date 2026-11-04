@@ -82,3 +82,20 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .alert b { font-weight: 400; text-decoration: underline; }
 .alert .cta { background: #A32D2D; color: #FCEBEB; }
 .sheet p b { font-weight: 400; font-size: 16px; }
+
+.splash { position: fixed; inset: 0; z-index: 10; background: var(--shell); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  transition: opacity .7s ease; }
+.splash.out { opacity: 0; pointer-events: none; }
+.splash img { width: min(56vw, 240px); image-rendering: pixelated; animation: pop .7s cubic-bezier(.3, 1.6, .5, 1) both; }
+.splash h1 { margin: 10px 0 0; font-size: 44px; font-weight: 400; color: var(--ink); animation: rise .6s .25s both; }
+.splash p { margin: 0; font-size: 16px; color: var(--ink); opacity: .7; animation: rise .6s .4s both; }
+/* อุ้งเท้าสำรอง ระหว่างยังไม่มี logo.png */
+.splash img + .paw { display: none; }
+.paw { position: relative; width: 120px; height: 110px; animation: pop .7s cubic-bezier(.3, 1.6, .5, 1) both; }
+.paw i, .paw b { position: absolute; background: var(--ink); }
+.paw i { width: 24px; height: 30px; border-radius: 50%; }
+.paw i:nth-child(1) { left: 6px; top: 34px; } .paw i:nth-child(2) { left: 32px; top: 8px; }
+.paw i:nth-child(3) { left: 64px; top: 8px; } .paw i:nth-child(4) { left: 90px; top: 34px; }
+.paw b { left: 30px; top: 50px; width: 60px; height: 52px; clip-path: polygon(50% 0, 100% 40%, 100% 100%, 0 100%, 0 40%); border-radius: 6px; }
+@keyframes pop { from { transform: scale(.6); opacity: 0; } }
+@keyframes rise { from { transform: translateY(8px); opacity: 0; } }
