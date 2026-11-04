@@ -2,8 +2,8 @@
 <html lang="th">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#f4e2be" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#F5C4B3" />
   <title>บ้านน้อน · Baan Non: Klong Life</title>
   <link rel="icon" type="image/png" href="./favicon.png" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
@@ -12,16 +12,42 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="บ้านน้อน" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&family=Itim&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Itim&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <div class="app">
-    <header class="title">
-      <h1>บ้านน้อน</h1>
-      <p>Baan Non: Klong Life</p>
+  <div class="dev">
+    <header class="top">
+      <button class="chip" id="chip-time" aria-label="เวลาในเกม"><span id="ic-time" class="emo">☀</span><span id="time"></span></button>
+      <button class="chip" id="chip-money" aria-label="เงิน"><span class="emo">🪙</span><span id="money"></span></button>
+      <button class="chip" id="chip-fans" aria-label="ผู้ติดตาม"><span class="emo">♥</span><span id="fans">0</span></button>
     </header>
-    <div class="stage"><canvas id="scene" aria-label="ฉากชานบ้านริมคลอง"></canvas></div>
-    <p class="note">กำลังสร้าง · ฉากและระบบเลี้ยงจะตามมาเร็วๆ นี้</p>
+    <div class="lcd">
+      <div class="scr" id="scr">
+        <canvas id="scene" aria-label="ชานบ้านริมคลอง แตะน้องเพื่อเล่นด้วย กดค้างเพื่อดูสถานะ"></canvas>
+        <button class="hud" id="hud" aria-label="สถานะน้อง">
+          <div class="m"><b id="pet-name"></b><span id="pet-idx"></span></div>
+          <div class="m">อิ่ม <span class="seg" id="seg-full"></span></div>
+          <div class="m">สะอาด <span class="seg" id="seg-clean"></span></div>
+          <div class="m">ผูกพัน <span class="seg" id="seg-bond"></span></div>
+        </button>
+        <button class="nav" id="prev" aria-label="น้องตัวก่อนหน้า">❮</button>
+        <button class="nav r" id="next" aria-label="น้องตัวถัดไป">❯</button>
+        <div class="floats" id="floats"></div>
+        <div class="banner" id="banner"></div>
+        <div class="toast" id="toast"></div>
+        <div class="pop" id="pop"><div class="sheet" id="sheet"></div></div>
+      </div>
+    </div>
+    <nav class="btns" id="btns">
+      <button data-act="feed"><span class="ic" data-ic="0"></span>กิน<i class="dot"></i></button>
+      <button data-act="bathe"><span class="ic" data-ic="4"></span>อาบน้ำ<i class="dot"></i></button>
+      <button data-act="play"><span class="ic" data-ic="7"></span>เล่น<i class="dot"></i></button>
+      <button data-act="train"><span class="ic" data-ic="5"></span>ฝึก<i class="dot"></i></button>
+      <button data-act="clinic"><span class="ic" data-ic="8"></span>คลินิก<i class="dot"></i></button>
+      <button data-act="album"><span class="ic" data-ic="11"></span>อัลบั้ม<i class="dot"></i></button>
+      <button data-act="page"><span class="ic" data-ic="11"></span>เพจ<i class="dot"></i></button>
+      <button data-act="menu"><span class="menu-ic">☰</span>เมนู<i class="dot"></i></button>
+    </nav>
   </div>
   <script type="module" src="/src/game/main.ts"></script>
 </body>

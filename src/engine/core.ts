@@ -53,6 +53,7 @@ export function advance(g: GameState, days: number, offline = false): GameEvent[
     const before = g.day;
     g.day += dt;
     if (Math.floor(g.day) > Math.floor(before)) events.push({ type: 'newDay', day: Math.floor(g.day) });
+    if (g.pets.length) g.money += B.tempIncomePerDay * dt; // ชั่วคราว (ขั้น 5 แทนด้วยช่องโซเชียล)
     for (const p of [...g.pets]) stepPet(g, p, dt, needsMult, events);
   }
   return events;
