@@ -32,6 +32,10 @@ export interface Pet {
   bathBondDay: number;
   playDay: number;
   playsToday: number;
+  /** อีกกี่วันจะขับถ่าย (-1 = ไม่มีค้าง) */
+  poopIn: number;
+  /** อาบด้วยแชมพูแล้วสะอาดนานถึงวันนี้ */
+  shampooUntil: number;
   /** วันที่ฝึกล่าสุด (-1e9 = ยังไม่เคย · ไม่ใช้ -Infinity เพราะเซฟเป็น JSON ไม่ได้) */
   lastTrain: number;
 }
@@ -65,10 +69,10 @@ export const isPostVax = (p: Pet, day: number) => day < p.health.postVaxUntil;
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 /** ค่าที่เปลี่ยนตามเวลา dt วัน (ไม่สุ่ม) — การสุ่มป่วยอยู่ใน core */
-export function decayPet(p: Pet, dt: number, needsMult = 1) {
+export function decayPet(p: Pet, dt: number, needsMult = 1, cleanMult = 1, extraBondPerDay = 0) {
   if (p.status !== 'home') return;
   p.full = clamp01(p.full - B.fullDecay * needsMult * dt);
-  p.clean = clamp01(p.clean - B.cleanDecay * needsMult * dt);
+  p.clean = clamp01(p.clean - B.cleanDecay * cleanMult * needsMult * dt);
 
   // นาฬิกาการละเลยทั้งหมดเดินช้าลงตอนปิดเกม เท่ากับความหิว
   const ndt = dt * needsMult;
@@ -77,7 +81,7 @@ export function decayPet(p: Pet, dt: number, needsMult = 1) {
   p.starveDays = p.full <= 0 ? p.starveDays + ndt : 0;
   p.sickDays = isSick(p) ? p.sickDays + ndt : 0;
 
-  let db = B.bondTogether;
+  let db = B.bondTogether + extraBondPerDay;
   if (isHungry(p)) db += B.bondHungry;
   if (isDirty(p)) db += B.bondDirty;
   if (isSick(p)) db += B.bondSick;

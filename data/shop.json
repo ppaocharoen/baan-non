@@ -1,0 +1,23 @@
+{
+  "furniture": [
+    { "key": "bed", "name": "เบาะนอนนุ่ม", "kind": "bed", "species": ["dog", "cat"], "price": 120, "desc": "น้องหมาแมวนอนตอนกลางคืน หลับสบาย ผูกพันเพิ่ม", "w": 22 },
+    { "key": "coolmat", "name": "แผ่นรองนอนเย็น", "kind": "bed", "species": ["dog", "cat"], "price": 80, "desc": "นอนเย็นสบายหน้าร้อน หลับสบาย ผูกพันเพิ่ม", "w": 22 },
+    { "key": "condo", "name": "คอนโดแมว", "kind": "bed", "species": ["cat"], "price": 300, "desc": "บ้านแมวหลายชั้น นอนได้ 2 ตัว ลับเล็บได้ด้วย", "w": 20, "slots": 2, "toy": true },
+    { "key": "cage", "name": "กรงนกพร้อมคอน", "kind": "bed", "species": ["bird"], "price": 250, "desc": "บ้านของนก นอนในกรง มีถาดรองขี้ในตัว", "w": 18, "toilet": 8 },
+    { "key": "litter", "name": "กระบะทรายแมว", "kind": "toilet", "species": ["cat"], "price": 90, "desc": "แมวเข้าห้องน้ำตรงนี้ เต็มแล้วตักทิ้ง (ใช้ทรายแมว)", "w": 18, "cap": 6, "supply": "sand" },
+    { "key": "peepad", "name": "ที่วางแผ่นรองฉี่", "kind": "toilet", "species": ["dog"], "price": 40, "desc": "หมาเข้าห้องน้ำตรงนี้ เต็มแล้วเปลี่ยนแผ่น (ใช้แผ่นรองฉี่)", "w": 20, "cap": 4, "supply": "pad" },
+    { "key": "bowl", "name": "ชามอาหารตั้งพื้น", "kind": "bowl", "species": ["dog", "cat", "bird"], "price": 30, "desc": "น้องเดินมากินที่ชามประจำ", "w": 12 },
+    { "key": "ball", "name": "ลูกบอลยาง", "kind": "toy", "species": ["dog", "cat"], "price": 25, "desc": "เล่นด้วยแล้วผูกพันเพิ่มขึ้น", "w": 8 },
+    { "key": "wand", "name": "ไม้ตกแมว", "kind": "toy", "species": ["cat"], "price": 35, "desc": "แมวชอบมาก เล่นแล้วผูกพันเพิ่มขึ้น", "w": 10 },
+    { "key": "perch", "name": "คอนเกาะเล่น", "kind": "toy", "species": ["bird"], "price": 45, "desc": "นกชอบเกาะเล่น ผูกพันเพิ่มขึ้น", "w": 12 },
+    { "key": "plant", "name": "กระถางต้นโกสน", "kind": "decor", "species": [], "price": 40, "desc": "ของแต่งบ้าน ช่วยให้รูปสวยขึ้น", "w": 12 },
+    { "key": "lamp", "name": "โคมไฟตะเกียง", "kind": "decor", "species": [], "price": 90, "desc": "ของแต่งบ้าน สว่างอบอุ่นตอนกลางคืน", "w": 10 },
+    { "key": "rug", "name": "เสื่อลายไทย", "kind": "decor", "species": [], "price": 70, "desc": "ของแต่งบ้าน", "w": 30 }
+  ],
+  "supplies": [
+    { "key": "sand", "name": "ทรายแมว", "price": 25, "uses": 3, "desc": "ใช้ตักกระบะทราย 3 ครั้ง" },
+    { "key": "pad", "name": "แผ่นรองฉี่", "price": 20, "uses": 3, "desc": "ใช้เปลี่ยนแผ่น 3 ครั้ง" },
+    { "key": "shampoo", "name": "แชมพูสัตว์", "price": 30, "uses": 3, "desc": "อาบน้ำแล้วสะอาดนานขึ้น 7 วัน ใช้ได้ 3 ครั้ง" },
+    { "key": "treat", "name": "ขนมฝึก", "price": 20, "uses": 5, "desc": "ใช้ตอนฝึก ได้ผลเพิ่มขึ้น 30% · 5 ครั้ง" }
+  ]
+}

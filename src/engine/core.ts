@@ -5,9 +5,10 @@ import { breedOf, foodOf } from './content';
 import { nextRandom } from './rng';
 import { offlineDays, onlineDays } from './time';
 import { careOf, diseaseOf, diseaseRisks, HEALTH, newHealth, vaccineOf, vaccineState, careState } from './health';
+import { digest, floorMess, hasToy, HYGIENE, stepHome, useSupply, type HomeItem, type Poop, type PoopEvent } from './home';
 import { decayPet, isPostVax, isSick, petAge, petStage, type Grave, type Pet } from './pet';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export interface GameState {
   v: number;
@@ -20,6 +21,13 @@ export interface GameState {
   pets: Pet[];
   heaven: Grave[];
   nextId: number;
+  /** ของในบ้าน (วางในฉากหรือเก็บในคลัง) */
+  items: HomeItem[];
+  /** ของสิ้นเปลือง: จำนวนครั้งที่ใช้ได้ */
+  supplies: Record<string, number>;
+  /** อึบนพื้น */
+  poops: Poop[];
+  nextUid: number;
   /** เวลาจริง (ms) ที่เดินเวลาล่าสุด — ใช้คิดเวลาตอนปิดเกม */
   lastReal: number;
 }
@@ -29,14 +37,15 @@ export type GameEvent =
   | { type: 'runaway'; petId: number }
   | { type: 'died'; petId: number; cause: 'age' | 'neglect' }
   | { type: 'stage'; petId: number; stage: 0 | 1 | 2 }
-  | { type: 'newDay'; day: number };
+  | { type: 'newDay'; day: number }
+  | PoopEvent;
 
 export interface Result { ok: boolean; reason?: string; }
 const fail = (reason: string): Result => ({ ok: false, reason });
 const OK: Result = { ok: true };
 
 export function newGame(mode: Mode, seed: number, nowMs: number): GameState {
-  return { v: SAVE_VERSION, mode, rng: seed >>> 0, day: B.startDay, money: B.startMoney, pets: [], heaven: [], nextId: 1, lastReal: nowMs };
+  return { v: SAVE_VERSION, mode, rng: seed >>> 0, day: B.startDay, money: B.startMoney, pets: [], heaven: [], nextId: 1, items: [], supplies: {}, poops: [], nextUid: 1, lastReal: nowMs };
 }
 
 export const petById = (g: GameState, id: number) => g.pets.find(p => p.id === id);
@@ -68,11 +77,15 @@ function stepPet(g: GameState, p: Pet, dt: number, needsMult: number, events: Ga
   if (stageNow !== stageBefore) events.push({ type: 'stage', petId: p.id, stage: stageNow });
   if (p.status !== 'home') return;
 
-  decayPet(p, dt, needsMult);
+  const mess = floorMess(g);
+  const cleanMult = (1 + HYGIENE.cleanMultPerPoop * mess) * (g.day < p.shampooUntil ? HYGIENE.shampooCleanMult : 1);
+  decayPet(p, dt, needsMult, cleanMult, HYGIENE.bondPerPoop * mess);
+  const pe = stepHome(g, p, dt, needsMult);
+  if (pe) events.push(pe);
 
   // สุ่มป่วย: รวมโอกาสทุกโรค แล้วเลือกโรคตามน้ำหนัก (ตอนปิดเกมช้าลงเท่าความหิว)
   if (!isSick(p)) {
-    const risks = diseaseRisks(p, g.day, p.lastFoodSick);
+    const risks = diseaseRisks(p, g.day, p.lastFoodSick, mess);
     const total = risks.reduce((a, r) => a + r.perDay, 0);
     if (total > 0 && nextRandom(g) < total * dt * needsMult) {
       let pick = nextRandom(g) * total, chosen = risks[0].d;
@@ -118,7 +131,7 @@ export function adopt(g: GameState, breedKey: string, name: string, price = 0): 
     id: g.nextId++, breed: br.key, name, born: g.day, lifespan, status: 'home',
     full: 0.8, clean: 0.8, bond: 0.1, trained: 0, health: newHealth(), sickDays: 0,
     hungryDays: 0, dirtyDays: 0, starveDays: 0, lastFoodSick: 1,
-    fedBondDay: -1, bathBondDay: -1, playDay: -1, playsToday: 0, lastTrain: -1e9,
+    fedBondDay: -1, bathBondDay: -1, playDay: -1, playsToday: 0, lastTrain: -1e9, poopIn: -1, shampooUntil: -1,
   };
   g.pets.push(pet);
   return { ...OK, pet };
@@ -142,20 +155,23 @@ export function feed(g: GameState, id: number, foodKey: string): Result {
   p.full = 1;
   p.starveDays = 0;
   p.lastFoodSick = f.sickMult;
+  digest(g, p);
   if (p.fedBondDay !== today(g)) { p.fedBondDay = today(g); addBond(p, B.bondFeed * f.bondMult); }
   return OK;
 }
 
-export function bathe(g: GameState, id: number): Result & { fever?: boolean } {
+export function bathe(g: GameState, id: number): Result & { fever?: boolean; shampoo?: boolean } {
   const p = atHome(g, id); if (!isPet(p)) return p;
   p.clean = 1;
+  const shampoo = useSupply(g, 'shampoo');
+  if (shampoo) p.shampooUntil = g.day + HYGIENE.shampooDays;
   if (p.bathBondDay !== today(g)) { p.bathBondDay = today(g); addBond(p, B.bondBathe); }
   // เพิ่งฉีดวัคซีนแล้วอาบน้ำ เสี่ยงเป็นไข้
   if (isPostVax(p, g.day) && !isSick(p) && nextRandom(g) < HEALTH.postVaxBathFever) {
     p.health.disease = 'fever';
-    return { ...OK, fever: true };
+    return { ...OK, fever: true, shampoo };
   }
-  return OK;
+  return { ...OK, shampoo };
 }
 
 export function play(g: GameState, id: number): Result {
@@ -163,7 +179,7 @@ export function play(g: GameState, id: number): Result {
   if (p.playDay !== today(g)) { p.playDay = today(g); p.playsToday = 0; }
   if (p.playsToday >= B.playsPerDay) return fail('วันนี้น้องเล่นจนเหนื่อยแล้ว');
   p.playsToday++;
-  addBond(p, B.bondPlay);
+  addBond(p, B.bondPlay * (hasToy(g, p) ? HYGIENE.toyPlayMult : 1));
   return OK;
 }
 
@@ -171,14 +187,15 @@ export const canTrain = (g: GameState, p: Pet) => p.status === 'home' && !isSick
 export const daysUntilTrain = (g: GameState, p: Pet) => Math.max(0, B.trainCooldown - (g.day - p.lastTrain));
 
 /** ส่งผลมินิเกมฝึก: แตะโดน hits ครั้งจาก trainTaps */
-export function train(g: GameState, id: number, hits: number): Result {
+export function train(g: GameState, id: number, hits: number): Result & { treat?: boolean } {
   const p = atHome(g, id); if (!isPet(p)) return p;
   if (isSick(p)) return fail('น้องป่วยอยู่ ฝึกไม่ได้');
   if (!canTrain(g, p)) return fail('ยังไม่ถึงรอบฝึก');
   const h = Math.max(0, Math.min(B.trainTaps, Math.round(hits)));
   p.lastTrain = g.day;
-  p.trained = Math.min(1, p.trained + B.trainGain * (h / B.trainTaps));
-  return OK;
+  const treat = h > 0 && useSupply(g, 'treat');
+  p.trained = Math.min(1, p.trained + B.trainGain * (h / B.trainTaps) * (treat ? HYGIENE.treatMult : 1));
+  return { ...OK, treat };
 }
 
 /** รักษาที่คลินิก: สัตวแพทย์วินิจฉัยแล้วจ่ายยาตรงโรค */

@@ -2,6 +2,7 @@
 import { BALANCE as B } from '../src/engine/balance';
 import { BREEDS, breedOf, FOODS } from '../src/engine/content';
 import { adopt, advance, bathe, canTrain, catchUpOffline, coax, feed, newGame, play, routineCare, tickOnline, train, treat, vaccinate, type GameState } from '../src/engine/core';
+import { buyFurniture, buySupply, cleanPoop, emptyToilet, placeItem, toiletFor } from '../src/engine/home';
 import { diseaseOf, dueItems, HEALTH, vaccineState, vaccineOf, vaccinesFor } from '../src/engine/health';
 import { petStage } from '../src/engine/pet';
 import { nextRandom } from '../src/engine/rng';
@@ -13,6 +14,8 @@ function check(name: string, ok: boolean) {
   if (!ok) fails++;
 }
 const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) < eps;
+/** เก็บอึบนพื้นทั้งหมด (ทดสอบเรื่องอื่นโดยไม่ให้บ้านสกปรกแทรก) */
+const tidy = (g: GameState) => { g.poops = []; };
 function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew', protect = false): { g: GameState; id: number } {
   const g = newGame(mode, 42, 0);
   g.money = 10000;
@@ -120,7 +123,7 @@ function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew', protect =
   advance(g, combo.gap); vaccinate(g, id, 'dog_combo');
   advance(g, combo.gap); vaccinate(g, id, 'dog_combo');
   check('ครบชุด 3 เข็ม', p.health.vax.dog_combo.doses === 3 && vaccineState(p, combo, g.day).s === 'ok');
-  for (let i = 0; i < combo.booster - HEALTH.dueEarly; i++) { advance(g, 1); feed(g, id, 'rice'); }
+  for (let i = 0; i < combo.booster - HEALTH.dueEarly; i++) { advance(g, 1); feed(g, id, 'rice'); tidy(g); }
   check('ใกล้ครบรอบ → ถึงกำหนดกระตุ้น', vaccineState(p, combo, g.day).s === 'due' && dueItems(p, g.day).vax.some(v => v.key === 'dog_combo'));
   check('ถ่ายพยาธิได้ แล้วไม่ถึงกำหนดอีก', routineCare(g, id, 'dog_deworm').ok && !routineCare(g, id, 'dog_deworm').ok);
 }
@@ -129,7 +132,7 @@ function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew', protect =
   const { g, id } = setup('normal', 'korat');
   const p = g.pets[0];
   let got: string | null = null;
-  for (let d = 0; d < 120 && !got; d++) { advance(g, 1); feed(g, id, 'rice'); if (p.clean < 0.5) bathe(g, id); got = p.health.disease; }
+  for (let d = 0; d < 120 && !got; d++) { advance(g, 1); feed(g, id, 'rice'); tidy(g); if (p.clean < 0.5) bathe(g, id); got = p.health.disease; }
   check('ไม่ป้องกัน → ป่วยโรคที่ป้องกันได้', got !== null && ['vaccine', 'care'].includes(diseaseOf(got).cause));
   const before = g.money, price = diseaseOf(got!).price;
   check('รักษาเสียค่ายาตามโรค', treat(g, id).ok && before - g.money === price);
@@ -141,7 +144,7 @@ function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew', protect =
   let sick = 0;
   for (let d = 0; d < 200; d++) {
     sick += advance(g, 1).filter(e => e.type === 'sick').length;
-    feed(g, id, 'kibble'); if (p.clean < 0.5 && g.day >= p.health.postVaxUntil) bathe(g, id);
+    feed(g, id, 'kibble'); tidy(g); if (p.clean < 0.5 && g.day >= p.health.postVaxUntil) bathe(g, id);
     const due = dueItems(p, g.day);
     due.vax.forEach(v => vaccinate(g, id, v.key)); due.care.forEach(c => routineCare(g, id, c.key));
   }
@@ -157,6 +160,49 @@ function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew', protect =
     if (bathe(g, id).fever) fevers++;
   }
   check('อาบน้ำหลังฉีดวัคซีน เสี่ยงไข้ ~30%', fevers > 8 && fevers < 30);
+}
+
+// ---- บ้าน ร้าน การขับถ่าย ----
+{
+  const { g, id } = setup('normal', 'korat', true);
+  const p = g.pets[0];
+  check('ซื้อกระบะทราย', buyFurniture(g, 'litter').ok && g.items.length === 1 && g.items[0].x === null);
+  check('ของที่ยังไม่วาง แมวใช้ไม่ได้', toiletFor(g, p) === undefined);
+  placeItem(g, g.items[0].uid, 120);
+  check('วางแล้วแมวใช้ได้ · หมาใช้ไม่ได้', toiletFor(g, p)?.key === 'litter' && toiletFor(setup('normal', 'bangkaew').g, setup('normal', 'bangkaew').g.pets[0]) === undefined);
+  let poops = 0, inBox = 0;
+  for (let i = 0; i < 40; i++) {
+    feed(g, id, 'rice');
+    for (const e of advance(g, 1.5)) if (e.type === 'poop') { poops++; if (e.toilet !== null) inBox++; }
+    if (g.items[0].fill >= 5) { g.supplies.sand = 9; emptyToilet(g, g.items[0].uid); }
+    if (p.clean < 0.5) bathe(g, id);
+    tidy(g);
+  }
+  check(`กินแล้วขับถ่ายมื้อละครั้ง (${poops}/40)`, poops >= 38 && poops <= 40);
+  check('ส่วนใหญ่เข้ากระบะ', inBox / poops > 0.4);
+  g.supplies.sand = 0; g.items[0].fill = 2;
+  check('ทรายหมด เทกระบะไม่ได้', !emptyToilet(g, g.items[0].uid).ok);
+  check('ซื้อทรายแล้วเทได้', buySupply(g, 'sand').ok && emptyToilet(g, g.items[0].uid).ok && g.supplies.sand === 2);
+}
+{
+  const { g, id } = setup('normal', 'bangkaew', true);
+  for (let i = 0; i < 10; i++) { feed(g, id, 'rice'); advance(g, 1.2); }
+  check('ไม่มีห้องน้ำ → อึบนพื้น มีเพดาน 4 กอง', g.poops.length === 4);
+  check('เก็บอึได้', cleanPoop(g, g.poops[0].id).ok && g.poops.length === 3);
+  const p = g.pets[0]; p.clean = 1;
+  advance(g, 2);
+  check('อึบนพื้นทำให้สกปรกเร็วขึ้น', p.clean < 1 - 2 * B.cleanDecay - 1e-9);
+}
+{
+  const { g, id } = setup('normal', 'bangkaew', true);
+  const p = g.pets[0];
+  buySupply(g, 'shampoo'); p.clean = 0.3;
+  check('อาบน้ำใช้แชมพู', bathe(g, id).shampoo === true && g.supplies.shampoo === 2);
+  buySupply(g, 'treat');
+  check('ฝึกใช้ขนม ได้ผลเพิ่ม', train(g, id, 5).treat === true && near(p.trained, B.trainGain * 1.3));
+  buyFurniture(g, 'ball'); placeItem(g, g.items[0].uid, 50);
+  const b0 = p.bond; play(g, id);
+  check('มีของเล่น เล่นได้ผูกพันมากขึ้น', near(p.bond - b0, B.bondPlay * 1.5));
 }
 
 // ---- เซฟเป็น JSON ได้ และเล่นต่อได้ผลเดิม ----

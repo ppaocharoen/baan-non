@@ -9,6 +9,8 @@ import { BALANCE as B, type Mode } from '../src/engine/balance';
 import { BREEDS } from '../src/engine/content';
 import { adopt, bathe, canTrain, catchUpOffline, coax, feed, newGame, play, routineCare, tickOnline, train, treat, vaccinate, type GameState } from '../src/engine/core';
 import { careFor, dueItems, vaccinesFor } from '../src/engine/health';
+import { buyFurniture, buySupply, cleanPoop, emptyToilet, furnitureOf, placeItem } from '../src/engine/home';
+import { breedOf } from '../src/engine/content';
 import { isSick, type Pet } from '../src/engine/pet';
 import { nextRandom } from '../src/engine/rng';
 import { realHoursOffline } from '../src/engine/time';
@@ -26,6 +28,9 @@ function fresh(mode: Mode, seed: number, breed: string, vaccinated = false) {
   g.money = 1e12;
   const pet = adopt(g, breed, 'น้อน').pet!;
   if (vaccinated) upToDate(g, pet);
+  // ห้องน้ำตามชนิด (นกเดินอิสระ ไม่มีกรง)
+  const toilet = { dog: 'peepad', cat: 'litter', bird: null }[breedOf(breed).species];
+  if (toilet) { const it = buyFurniture(g, toilet).item!; placeItem(g, it.uid, 100); }
   return { g, id: pet.id };
 }
 /** ทำให้วัคซีนและการดูแลประจำครบ ณ วันนี้ (น้องที่ได้รับการดูแลมาดี) */
@@ -38,6 +43,12 @@ function upToDate(g: GameState, p: Pet) {
 function careSession(g: GameState, now: number, minutes: number, rngHits: { rng: number }): number {
   let sick = catchUpOffline(g, now).events.filter(e => e.type === 'sick').length;
   const doCare = () => {
+    for (const po of [...g.poops]) cleanPoop(g, po.id);
+    for (const it of g.items) if (it.fill > 0) {
+      const sup = furnitureOf(it.key).supply;
+      if (sup && !(g.supplies[sup] > 0)) buySupply(g, sup);
+      emptyToilet(g, it.uid);
+    }
     for (const p of [...g.pets]) {
       if (p.status === 'away') coax(g, p.id);
       if (p.status !== 'home') continue;
@@ -161,6 +172,21 @@ function careSession(g: GameState, now: number, minutes: number, rngHits: { rng:
     lives++;
   }
   console.log(`   ผู้เล่นขี้ลืม 30 วันจริง (100 ตัว): ป่วยเฉลี่ย ${(sick / lives).toFixed(2)} ครั้ง/ตัว · หนีเฉลี่ย ${(runaway / lives).toFixed(2)} ครั้ง/ตัว`);
+}
+
+// ---------- รายงาน: อึ ----------
+{
+  let floor = 0, toilet = 0;
+  for (let seed = 1; seed <= 40; seed++) for (const br of BREEDS.filter(b => b.species !== 'bird')) {
+    const { g, id } = fresh('normal', seed, br.key, true);
+    for (let d = 0; d < 30; d++) {
+      feed(g, id, 'kibble');
+      for (const e of catchUpOffline(g, (d + 1) * 8 * H).events) if (e.type === 'poop') { if (e.toilet === null) floor++; else toilet++; }
+      for (const po of [...g.poops]) cleanPoop(g, po.id);
+      for (const it of g.items) { if (it.fill) { buySupply(g, furnitureOf(it.key).supply!); emptyToilet(g, it.uid); } }
+    }
+  }
+  console.log(`   ขับถ่าย หมา/แมวที่มีห้องน้ำ (วัยเด็ก ยังไม่ฝึก): เข้าห้องน้ำ ${Math.round(toilet / (toilet + floor) * 100)}% · บนพื้น ${Math.round(floor / (toilet + floor) * 100)}%`);
 }
 
 console.log('… 4. ผู้ติดตามไม่โตทวีคูณ — รอขั้น 5 (ช่องโซเชียล)');

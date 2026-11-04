@@ -126,6 +126,9 @@ class Sfx {
     const notes = sad ? [659, 587, 523, 440, 392] : [523, 587, 659, 784, 880, 1047];
     notes.forEach((f, i) => this.tone({ wave: 'triangle', f: [f], dur: sad ? 0.38 : 0.16, vol: 0.13, at: i * (sad ? 0.3 : 0.11), attack: 0.02 }));
   }
+  plop() { this.tone({ wave: 'sine', f: [320, 140], dur: 0.12, vol: 0.18 }); }
+  sweep() { this.noise({ dur: 0.18, vol: 0.18, f: 4000, q: 0.8 }); this.noise({ dur: 0.15, vol: 0.14, f: 3000, q: 0.8, at: 0.16 }); this.tone({ wave: 'triangle', f: [1568, 2093], dur: 0.12, vol: 0.08, at: 0.3 }); }
+  buy() { this.coin(); this.tone({ wave: 'triangle', f: [784, 1047], dur: 0.15, vol: 0.1, at: 0.2 }); }
   grow() { [523, 659, 784, 1047].forEach((f, i) => this.tone({ wave: 'square', f: [f], dur: 0.12, vol: 0.08, at: i * 0.09 })); }
 }
 

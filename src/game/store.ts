@@ -31,6 +31,11 @@ function migrate(g: any): GameState | null {
     }
     g.v = 2;
   }
+  if (g.v === 2) { // v2 → v3: ของในบ้าน ของสิ้นเปลือง การขับถ่าย
+    g.items ??= []; g.supplies ??= {}; g.poops ??= []; g.nextUid ??= 1;
+    for (const p of g.pets ?? []) { p.poopIn ??= -1; p.shampooUntil ??= -1; }
+    g.v = 3;
+  }
   return g as GameState;
 }
 

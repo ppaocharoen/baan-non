@@ -101,7 +101,8 @@ function careOk(p: Pet, key: string, day: number): boolean {
 }
 
 /** โอกาสเป็นแต่ละโรคต่อวัน ตอนนี้ */
-export function diseaseRisks(p: Pet, day: number, foodSickMult: number): { d: Disease; perDay: number }[] {
+export function diseaseRisks(p: Pet, day: number, foodSickMult: number, floorMess = 0): { d: Disease; perDay: number }[] {
+  const messRisk = Math.max(0, floorMess - 1) * 0.04; // อึบนพื้นเกิน 1 กอง
   const sp = speciesOf(p), young = day - p.born < breedOf(p.breed).stages[0];
   const out: { d: Disease; perDay: number }[] = [];
   for (const d of HEALTH.diseases) {
@@ -109,8 +110,8 @@ export function diseaseRisks(p: Pet, day: number, foodSickMult: number): { d: Di
     let r = 0;
     if (d.cause === 'vaccine') r = d.base * (1 - vaxProtection(p, d.by!, day));
     else if (d.cause === 'care') r = careOk(p, d.by!, day) ? 0 : d.base;
-    else if (d.cause === 'hungry') r = p.hungryDays > B.riskAfterDays ? d.base * foodSickMult : 0;
-    else if (d.cause === 'dirty') r = p.dirtyDays > B.riskAfterDays ? d.base : 0;
+    else if (d.cause === 'hungry') r = (p.hungryDays > B.riskAfterDays ? d.base * foodSickMult : 0) + messRisk;
+    else if (d.cause === 'dirty') r = (p.dirtyDays > B.riskAfterDays ? d.base : 0) + messRisk;
     if (young && d.youngMult) r *= d.youngMult;
     if (r > 0) out.push({ d, perDay: r });
   }
