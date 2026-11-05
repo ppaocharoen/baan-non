@@ -5,7 +5,7 @@ import { breedOf, type Species } from './content';
 import type { Pet } from './pet';
 
 export interface Vaccine { key: string; name: string; species: Species; covers: string; minAge: number; series: number; gap: number; booster: number; price: number; }
-export interface Care { key: string; name: string; species: Species; every: number; price: number; }
+export interface Care { key: string; name: string; species: Species; every: number; price: number; /** ตอนเด็กถี่กว่า (เช่น ถ่ายพยาธิลูกสัตว์ทุก 2 สัปดาห์) จนถึงอายุ youngUntil */ youngEvery?: number; youngUntil?: number; }
 export type Cause = 'vaccine' | 'care' | 'hungry' | 'dirty' | 'postvax';
 export interface Disease {
   key: string; name: string; species: Species | 'any'; symptom: string; cause: Cause;
@@ -20,14 +20,14 @@ export interface Disease {
 }
 
 export const HEALTH = healthJson as {
-  note: string; maternalDays: number; dueEarly: number; grace: number; postVaxDays: number; postVaxBathFever: number;
+  note: string; yearDays: number; maternalDays: number; dueEarly: number; grace: number; postVaxDays: number; postVaxBathFever: number;
   vaccines: Vaccine[]; care: Care[]; diseases: Disease[];
 };
 
 export interface HealthState {
-  /** วัคซีน: จำนวนเข็มที่ได้ และวันที่ฉีดล่าสุด */
+  /** วัคซีน: จำนวนเข็มที่ได้ และเวลาที่ฉีดล่าสุด (ตามนาฬิกาดูแล careClock) */
   vax: Record<string, { doses: number; last: number }>;
-  /** ดูแลประจำ: วันที่ทำล่าสุด */
+  /** ดูแลประจำ: เวลาที่ทำล่าสุด (ตามนาฬิกาดูแล careClock) */
   care: Record<string, number>;
   /** โรคที่เป็นอยู่ (null = ไม่ป่วย) */
   disease: string | null;
@@ -61,18 +61,20 @@ export function vaccineState(p: Pet, v: Vaccine, day: number): ItemState {
   const age = day - p.born + EPS, r = p.health.vax[v.key];
   if (!r || r.doses === 0) return age < v.minAge ? { s: 'notyet', inDays: v.minAge - age } : { s: age > HEALTH.maternalDays ? 'overdue' : 'due', dose: 1 };
   if (r.doses < v.series) {
-    const wait = r.last + v.gap - day - EPS;
+    const wait = r.last + v.gap - p.careClock - EPS;
     return wait > 0 ? { s: 'series', dose: r.doses + 1, inDays: wait } : { s: wait < -HEALTH.grace ? 'overdue' : 'due', dose: r.doses + 1 };
   }
-  const next = r.last + v.booster - day - EPS;
+  const next = r.last + v.booster - p.careClock - EPS;
   if (next > HEALTH.dueEarly) return { s: 'ok', inDays: next };
   return { s: next < -HEALTH.grace ? 'overdue' : 'due' };
 }
 
+/** รอบการดูแลตอนนี้ (ลูกสัตว์ถี่กว่า) */
+export const careEvery = (p: Pet, c: Care, day: number) => (c.youngEvery && c.youngUntil && day - p.born < c.youngUntil ? c.youngEvery : c.every);
 export function careState(p: Pet, c: Care, day: number): ItemState {
   const last = p.health.care[c.key];
   if (last === undefined) return { s: day - p.born > HEALTH.maternalDays ? 'overdue' : 'due' };
-  const next = last + c.every - day - EPS;
+  const next = last + careEvery(p, c, day) - p.careClock - EPS;
   if (next > HEALTH.dueEarly) return { s: 'ok', inDays: next };
   return { s: next < -HEALTH.grace ? 'overdue' : 'due' };
 }
@@ -91,13 +93,13 @@ function vaxProtection(p: Pet, key: string, day: number): number {
   if (day - p.born < HEALTH.maternalDays) return 1; // ภูมิจากแม่
   const v = vaccineOf(key), r = p.health.vax[key];
   if (!r || r.doses === 0) return 0;
-  if (r.doses < v.series) return 0.6;
-  return day - r.last <= v.booster + HEALTH.grace ? 1 : 0;
+  if (r.doses < v.series) return r.doses >= 2 ? 1 : 0.8; // ระหว่างชุดแรก: เข็ม 2 ขึ้นไปถือว่าคุ้มกันแล้วในเกม
+  return p.careClock - r.last <= v.booster + HEALTH.grace ? 1 : 0;
 }
 function careOk(p: Pet, key: string, day: number): boolean {
   if (day - p.born < HEALTH.maternalDays) return true;
   const last = p.health.care[key];
-  return last !== undefined && day - last <= careOf(key).every + HEALTH.grace;
+  return last !== undefined && p.careClock - last <= careEvery(p, careOf(key), day) + HEALTH.grace;
 }
 
 /** โอกาสเป็นแต่ละโรคต่อวัน ตอนนี้ */

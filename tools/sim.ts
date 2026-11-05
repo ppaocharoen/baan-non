@@ -36,13 +36,15 @@ function fresh(mode: Mode, seed: number, breed: string, vaccinated = false) {
 }
 /** ทำให้วัคซีนและการดูแลประจำครบ ณ วันนี้ (น้องที่ได้รับการดูแลมาดี) */
 function upToDate(g: GameState, p: Pet) {
-  for (const v of vaccinesFor(p)) p.health.vax[v.key] = { doses: v.series, last: g.day };
-  for (const c of careFor(p)) p.health.care[c.key] = g.day;
+  for (const v of vaccinesFor(p)) p.health.vax[v.key] = { doses: v.series, last: p.careClock };
+  for (const c of careFor(p)) p.health.care[c.key] = p.careClock;
+  p.born -= 20; // พ้นวัยลูกสัตว์ที่ต้องถ่ายพยาธิถี่
 }
 
 /** ผู้เล่นดูแลปกติ: เปิดเกมแล้วทำครบทุกอย่างที่ควรทำ */
 function careSession(g: GameState, now: number, minutes: number, rngHits: { rng: number }): number {
-  let sick = catchUpOffline(g, now).events.filter(e => e.type === 'sick').length;
+  const evs = catchUpOffline(g, now).events; let sick = evs.filter(e => e.type === 'sick').length;
+  for (const e of evs) if (e.type === 'sick' && process.env.DBG) console.log('DBG sick', e.disease, g.pets[0]?.breed, (g.day - g.pets[0]?.born).toFixed(1));
   const doCare = () => {
     for (const po of [...g.poops]) cleanPoop(g, po.id);
     for (const it of g.items) if (it.fill > 0) {

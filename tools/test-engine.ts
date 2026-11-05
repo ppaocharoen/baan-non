@@ -121,10 +121,9 @@ function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew', protect =
   check('ถึงอายุ ฉีดเข็ม 1 ได้', vaccinate(g, id, 'dog_combo').ok && p.health.vax.dog_combo.doses === 1);
   check('ฉีดซ้ำก่อนครบระยะไม่ได้', !vaccinate(g, id, 'dog_combo').ok);
   check('หลังฉีดซึม (postVax)', g.day < p.health.postVaxUntil);
-  advance(g, combo.gap); vaccinate(g, id, 'dog_combo');
-  advance(g, combo.gap); vaccinate(g, id, 'dog_combo');
-  check('ครบชุด 3 เข็ม', p.health.vax.dog_combo.doses === 3 && vaccineState(p, combo, g.day).s === 'ok');
-  for (let i = 0; i < combo.booster - HEALTH.dueEarly; i++) { advance(g, 1); feed(g, id, 'rice'); tidy(g); }
+  for (let i = 1; i < combo.series; i++) { advance(g, combo.gap); p.health.disease = null; feed(g, id, 'rice'); tidy(g); vaccinate(g, id, 'dog_combo'); }
+  check(`ครบชุด ${combo.series} เข็ม`, p.health.vax.dog_combo.doses === combo.series && vaccineState(p, combo, g.day).s === 'ok');
+  for (let i = 0; i < combo.booster - HEALTH.dueEarly; i++) { advance(g, 1); feed(g, id, 'rice'); tidy(g); p.health.disease = null; }
   check('ใกล้ครบรอบ → ถึงกำหนดกระตุ้น', vaccineState(p, combo, g.day).s === 'due' && dueItems(p, g.day).vax.some(v => v.key === 'dog_combo'));
   check('ถ่ายพยาธิได้ แล้วไม่ถึงกำหนดอีก', routineCare(g, id, 'dog_deworm').ok && !routineCare(g, id, 'dog_deworm').ok);
 }
@@ -157,7 +156,7 @@ function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew', protect =
   for (let s = 1; s <= 60; s++) {
     const g = newGame('normal', s, 0); g.money = 1e6;
     const id = adopt(g, 'khaomanee', 'x').pet!.id;
-    advance(g, 3); vaccinate(g, id, 'cat_combo'); g.pets[0].clean = 0.5;
+    advance(g, 4.5); g.pets[0].health.disease = null; vaccinate(g, id, 'cat_combo'); g.pets[0].clean = 0.5;
     if (bathe(g, id).fever) fevers++;
   }
   check('อาบน้ำหลังฉีดวัคซีน เสี่ยงไข้ ~30%', fevers > 8 && fevers < 30);

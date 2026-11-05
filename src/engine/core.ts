@@ -9,7 +9,7 @@ import { digest, floorMess, hasToy, HYGIENE, stepHome, useSupply, type HomeItem,
 import { newSocial, passiveIncome, type SocialState } from './social';
 import { decayPet, isPostVax, isSick, petAge, petStage, type Grave, type Pet } from './pet';
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 
 export interface GameState {
   v: number;
@@ -83,6 +83,7 @@ function stepPet(g: GameState, p: Pet, dt: number, needsMult: number, events: Ga
   const mess = floorMess(g);
   const cleanMult = (1 + HYGIENE.cleanMultPerPoop * mess) * (g.day < p.shampooUntil ? HYGIENE.shampooCleanMult : 1);
   decayPet(p, dt, needsMult, cleanMult, HYGIENE.bondPerPoop * mess);
+  p.careClock += dt * needsMult;
   const pe = stepHome(g, p, dt, needsMult);
   if (pe) events.push(pe);
 
@@ -134,7 +135,7 @@ export function adopt(g: GameState, breedKey: string, name: string, price = 0): 
     id: g.nextId++, breed: br.key, name, born: g.day, lifespan, status: 'home', room: 'terrace',
     full: 0.8, clean: 0.8, bond: 0.1, trained: 0, health: newHealth(), sickDays: 0,
     hungryDays: 0, dirtyDays: 0, starveDays: 0, lastFoodSick: 1,
-    fedBondDay: -1, bathBondDay: -1, playDay: -1, playsToday: 0, lastTrain: -1e9, poopIn: -1, shampooUntil: -1,
+    fedBondDay: -1, bathBondDay: -1, playDay: -1, playsToday: 0, lastTrain: -1e9, poopIn: -1, shampooUntil: -1, careClock: 0,
   };
   g.pets.push(pet);
   return { ...OK, pet };
@@ -225,7 +226,7 @@ export function vaccinate(g: GameState, id: number, key: string): Result {
   if (g.money < v.price) return fail('เงินไม่พอ');
   g.money -= v.price;
   const r = p.health.vax[key] ?? { doses: 0, last: 0 };
-  p.health.vax[key] = { doses: Math.min(v.series, r.doses + 1), last: g.day };
+  p.health.vax[key] = { doses: Math.min(v.series, r.doses + 1), last: p.careClock };
   p.health.postVaxUntil = g.day + HEALTH.postVaxDays;
   return OK;
 }
@@ -239,7 +240,7 @@ export function routineCare(g: GameState, id: number, key: string): Result {
   if (st.s === 'ok') return fail(`ยังไม่ถึงกำหนด อีก ${Math.ceil(st.inDays)} วัน`);
   if (g.money < c.price) return fail('เงินไม่พอ');
   g.money -= c.price;
-  p.health.care[key] = g.day;
+  p.health.care[key] = p.careClock;
   return OK;
 }
 

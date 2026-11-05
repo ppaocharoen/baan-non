@@ -1,37 +1,257 @@
 {
-  "note": "ข้อมูลแบบย่อจากหลักทั่วไป (เริ่มวัคซีนตอนเด็ก ฉีดเป็นชุด แล้วกระตุ้นสม่ำเสมอ · ถ่ายพยาธิ/ป้องกันเห็บหมัดเป็นประจำ · นกไม่มีวัคซีนประจำ) เวลาถูกย่อให้เข้ากับเกม — น้องจริงควรปรึกษาสัตวแพทย์",
-  "maternalDays": 20,
-  "dueEarly": 3,
-  "grace": 7,
-  "postVaxDays": 2,
+  "note": "ย่อเวลาตามจริง: 1 ปีของน้อง ≈ 34 วันในเกม (1 สัปดาห์ ≈ 0.65 วัน) · อ้างอิงแนวทาง WSAVA 2024: วัคซีนรวมเริ่ม 6–8 สัปดาห์ ฉีดซ้ำทุก 2–4 สัปดาห์จนอายุ 16 สัปดาห์ขึ้นไป แล้วกระตุ้นตอน 1 ปี · พิษสุนัขบ้าเข็มแรก 12 สัปดาห์ กระตุ้นทุกปีตามที่นิยมในไทย · ถ่ายพยาธิ/ป้องกันเห็บหมัดแบบหยดทุก 3 เดือน · น้องจริงควรปรึกษาสัตวแพทย์",
+  "maternalDays": 12,
+  "dueEarly": 1,
+  "grace": 3,
+  "postVaxDays": 0.5,
   "postVaxBathFever": 0.3,
   "vaccines": [
-    { "key": "dog_combo", "name": "วัคซีนรวมสุนัข", "species": "dog", "covers": "ลำไส้อักเสบ ไข้หัด ตับอักเสบ", "minAge": 3, "series": 3, "gap": 3, "booster": 28, "price": 80 },
-    { "key": "dog_rabies", "name": "พิษสุนัขบ้า", "species": "dog", "covers": "พิษสุนัขบ้า", "minAge": 6, "series": 1, "gap": 0, "booster": 28, "price": 50 },
-    { "key": "cat_combo", "name": "วัคซีนรวมแมว", "species": "cat", "covers": "หัดแมว หวัดแมว", "minAge": 3, "series": 3, "gap": 3, "booster": 28, "price": 80 },
-    { "key": "cat_rabies", "name": "พิษสุนัขบ้า", "species": "cat", "covers": "พิษสุนัขบ้า", "minAge": 6, "series": 1, "gap": 0, "booster": 28, "price": 50 }
+    {
+      "key": "dog_combo",
+      "name": "วัคซีนรวมสุนัข",
+      "species": "dog",
+      "covers": "ลำไส้อักเสบ ไข้หัด ตับอักเสบ",
+      "minAge": 4,
+      "series": 4,
+      "gap": 2.2,
+      "booster": 34,
+      "price": 80
+    },
+    {
+      "key": "dog_rabies",
+      "name": "พิษสุนัขบ้า",
+      "species": "dog",
+      "covers": "พิษสุนัขบ้า",
+      "minAge": 8,
+      "series": 2,
+      "gap": 2.8,
+      "booster": 34,
+      "price": 50
+    },
+    {
+      "key": "cat_combo",
+      "name": "วัคซีนรวมแมว",
+      "species": "cat",
+      "covers": "หัดแมว หวัดแมว",
+      "minAge": 4,
+      "series": 4,
+      "gap": 2.2,
+      "booster": 34,
+      "price": 80
+    },
+    {
+      "key": "cat_rabies",
+      "name": "พิษสุนัขบ้า",
+      "species": "cat",
+      "covers": "พิษสุนัขบ้า",
+      "minAge": 8,
+      "series": 2,
+      "gap": 2.8,
+      "booster": 34,
+      "price": 50
+    }
   ],
   "care": [
-    { "key": "dog_deworm", "name": "ถ่ายพยาธิ", "species": "dog", "every": 28, "price": 20 },
-    { "key": "dog_tick", "name": "ป้องกันเห็บหมัด", "species": "dog", "every": 28, "price": 30 },
-    { "key": "cat_deworm", "name": "ถ่ายพยาธิ", "species": "cat", "every": 28, "price": 20 },
-    { "key": "cat_flea", "name": "ป้องกันหมัด", "species": "cat", "every": 28, "price": 30 },
-    { "key": "bird_deworm", "name": "ถ่ายพยาธิ", "species": "bird", "every": 56, "price": 15 },
-    { "key": "bird_vitamin", "name": "วิตามินนก", "species": "bird", "every": 14, "price": 10 }
+    {
+      "key": "dog_deworm",
+      "name": "ถ่ายพยาธิ",
+      "species": "dog",
+      "every": 8.5,
+      "price": 20
+    },
+    {
+      "key": "dog_tick",
+      "name": "ป้องกันเห็บหมัด",
+      "species": "dog",
+      "every": 8.5,
+      "price": 30
+    },
+    {
+      "key": "cat_deworm",
+      "name": "ถ่ายพยาธิ",
+      "species": "cat",
+      "every": 8.5,
+      "price": 20
+    },
+    {
+      "key": "cat_flea",
+      "name": "ป้องกันหมัด",
+      "species": "cat",
+      "every": 8.5,
+      "price": 30
+    },
+    {
+      "key": "bird_deworm",
+      "name": "ถ่ายพยาธิ",
+      "species": "bird",
+      "every": 10,
+      "price": 15
+    },
+    {
+      "key": "bird_vitamin",
+      "name": "วิตามินรวม (คอร์ส 3 เดือน)",
+      "species": "bird",
+      "every": 8.5,
+      "price": 10
+    }
   ],
   "diseases": [
-    { "key": "parvo", "name": "ลำไส้อักเสบ", "species": "dog", "symptom": "อาเจียน ถ่ายเหลว ซึมมาก", "cause": "vaccine", "by": "dog_combo", "base": 0.03, "youngMult": 2, "limit": 8, "med": "ให้น้ำเกลือและยา", "price": 300 },
-    { "key": "distemper", "name": "ไข้หัดสุนัข", "species": "dog", "symptom": "มีไข้ น้ำมูก ตาแฉะ", "cause": "vaccine", "by": "dog_combo", "base": 0.015, "youngMult": 1.5, "limit": 12, "med": "ยาลดไข้และยาปฏิชีวนะ", "price": 250 },
-    { "key": "dog_worms", "name": "พยาธิในลำไส้", "species": "dog", "symptom": "ท้องป่อง ผอมลง ขนไม่เงา", "cause": "care", "by": "dog_deworm", "base": 0.04, "limit": 20, "med": "ยาถ่ายพยาธิชุดรักษา", "price": 60 },
-    { "key": "ticks", "name": "เห็บหมัดรุม", "species": "dog", "symptom": "เกาไม่หยุด มีเห็บตามตัว", "cause": "care", "by": "dog_tick", "base": 0.04, "limit": 20, "med": "ยากำจัดเห็บหมัด", "price": 70 },
-    { "key": "panleuk", "name": "หัดแมว", "species": "cat", "symptom": "อาเจียน ไม่กินอาหาร ซึมมาก", "cause": "vaccine", "by": "cat_combo", "base": 0.03, "youngMult": 2, "limit": 8, "med": "ให้น้ำเกลือและยา", "price": 300 },
-    { "key": "catflu", "name": "หวัดแมว", "species": "cat", "symptom": "จาม น้ำมูก ตาแฉะ", "cause": "vaccine", "by": "cat_combo", "base": 0.02, "limit": 14, "med": "ยาหยอดตาและยาปฏิชีวนะ", "price": 150 },
-    { "key": "cat_worms", "name": "พยาธิในลำไส้", "species": "cat", "symptom": "ท้องป่อง ผอมลง", "cause": "care", "by": "cat_deworm", "base": 0.04, "limit": 20, "med": "ยาถ่ายพยาธิชุดรักษา", "price": 60 },
-    { "key": "fleas", "name": "หมัดรุม", "species": "cat", "symptom": "เกาไม่หยุด ขนร่วงเป็นหย่อม", "cause": "care", "by": "cat_flea", "base": 0.04, "limit": 20, "med": "ยากำจัดหมัด", "price": 70 },
-    { "key": "bird_worms", "name": "พยาธิในนก", "species": "bird", "symptom": "ผอม ขนฟู ไม่ค่อยร้อง", "cause": "care", "by": "bird_deworm", "base": 0.03, "limit": 20, "med": "ยาถ่ายพยาธิสำหรับนก", "price": 50 },
-    { "key": "feather", "name": "ขนร่วง", "species": "bird", "symptom": "ขนร่วง ขนไม่เงา", "cause": "care", "by": "bird_vitamin", "base": 0.04, "limit": 25, "med": "วิตามินชุดฟื้นฟู", "price": 40 },
-    { "key": "gastro", "name": "ท้องเสีย", "species": "any", "symptom": "ถ่ายเหลว อ่อนเพลีย", "cause": "hungry", "base": 0.15, "limit": 14, "med": "ยาแก้ท้องเสีย", "price": 50 },
-    { "key": "skin", "name": "โรคผิวหนัง", "species": "any", "symptom": "คัน ผิวแดง มีกลิ่น", "cause": "dirty", "base": 0.15, "limit": 16, "med": "แชมพูยาและยาทา", "price": 60 },
-    { "key": "fever", "name": "ไข้หลังฉีดวัคซีน", "species": "any", "symptom": "ตัวรุมๆ ซึม หลังอาบน้ำทั้งที่เพิ่งฉีดวัคซีน", "cause": "postvax", "base": 0, "limit": 10, "med": "ยาลดไข้", "price": 30 }
-  ]
+    {
+      "key": "parvo",
+      "name": "ลำไส้อักเสบ",
+      "species": "dog",
+      "symptom": "อาเจียน ถ่ายเหลว ซึมมาก",
+      "cause": "vaccine",
+      "by": "dog_combo",
+      "base": 0.03,
+      "youngMult": 2,
+      "limit": 8,
+      "med": "ให้น้ำเกลือและยา",
+      "price": 300
+    },
+    {
+      "key": "distemper",
+      "name": "ไข้หัดสุนัข",
+      "species": "dog",
+      "symptom": "มีไข้ น้ำมูก ตาแฉะ",
+      "cause": "vaccine",
+      "by": "dog_combo",
+      "base": 0.015,
+      "youngMult": 1.5,
+      "limit": 12,
+      "med": "ยาลดไข้และยาปฏิชีวนะ",
+      "price": 250
+    },
+    {
+      "key": "dog_worms",
+      "name": "พยาธิในลำไส้",
+      "species": "dog",
+      "symptom": "ท้องป่อง ผอมลง ขนไม่เงา",
+      "cause": "care",
+      "by": "dog_deworm",
+      "base": 0.04,
+      "limit": 20,
+      "med": "ยาถ่ายพยาธิชุดรักษา",
+      "price": 60
+    },
+    {
+      "key": "ticks",
+      "name": "เห็บหมัดรุม",
+      "species": "dog",
+      "symptom": "เกาไม่หยุด มีเห็บตามตัว",
+      "cause": "care",
+      "by": "dog_tick",
+      "base": 0.04,
+      "limit": 20,
+      "med": "ยากำจัดเห็บหมัด",
+      "price": 70
+    },
+    {
+      "key": "panleuk",
+      "name": "หัดแมว",
+      "species": "cat",
+      "symptom": "อาเจียน ไม่กินอาหาร ซึมมาก",
+      "cause": "vaccine",
+      "by": "cat_combo",
+      "base": 0.03,
+      "youngMult": 2,
+      "limit": 8,
+      "med": "ให้น้ำเกลือและยา",
+      "price": 300
+    },
+    {
+      "key": "catflu",
+      "name": "หวัดแมว",
+      "species": "cat",
+      "symptom": "จาม น้ำมูก ตาแฉะ",
+      "cause": "vaccine",
+      "by": "cat_combo",
+      "base": 0.02,
+      "limit": 14,
+      "med": "ยาหยอดตาและยาปฏิชีวนะ",
+      "price": 150
+    },
+    {
+      "key": "cat_worms",
+      "name": "พยาธิในลำไส้",
+      "species": "cat",
+      "symptom": "ท้องป่อง ผอมลง",
+      "cause": "care",
+      "by": "cat_deworm",
+      "base": 0.04,
+      "limit": 20,
+      "med": "ยาถ่ายพยาธิชุดรักษา",
+      "price": 60
+    },
+    {
+      "key": "fleas",
+      "name": "หมัดรุม",
+      "species": "cat",
+      "symptom": "เกาไม่หยุด ขนร่วงเป็นหย่อม",
+      "cause": "care",
+      "by": "cat_flea",
+      "base": 0.04,
+      "limit": 20,
+      "med": "ยากำจัดหมัด",
+      "price": 70
+    },
+    {
+      "key": "bird_worms",
+      "name": "พยาธิในนก",
+      "species": "bird",
+      "symptom": "ผอม ขนฟู ไม่ค่อยร้อง",
+      "cause": "care",
+      "by": "bird_deworm",
+      "base": 0.03,
+      "limit": 20,
+      "med": "ยาถ่ายพยาธิสำหรับนก",
+      "price": 50
+    },
+    {
+      "key": "feather",
+      "name": "ขนร่วง",
+      "species": "bird",
+      "symptom": "ขนร่วง ขนไม่เงา",
+      "cause": "care",
+      "by": "bird_vitamin",
+      "base": 0.04,
+      "limit": 25,
+      "med": "วิตามินชุดฟื้นฟู",
+      "price": 40
+    },
+    {
+      "key": "gastro",
+      "name": "ท้องเสีย",
+      "species": "any",
+      "symptom": "ถ่ายเหลว อ่อนเพลีย",
+      "cause": "hungry",
+      "base": 0.15,
+      "limit": 14,
+      "med": "ยาแก้ท้องเสีย",
+      "price": 50
+    },
+    {
+      "key": "skin",
+      "name": "โรคผิวหนัง",
+      "species": "any",
+      "symptom": "คัน ผิวแดง มีกลิ่น",
+      "cause": "dirty",
+      "base": 0.15,
+      "limit": 16,
+      "med": "แชมพูยาและยาทา",
+      "price": 60
+    },
+    {
+      "key": "fever",
+      "name": "ไข้หลังฉีดวัคซีน",
+      "species": "any",
+      "symptom": "ตัวรุมๆ ซึม หลังอาบน้ำทั้งที่เพิ่งฉีดวัคซีน",
+      "cause": "postvax",
+      "base": 0,
+      "limit": 10,
+      "med": "ยาลดไข้",
+      "price": 30
+    }
+  ],
+  "yearDays": 34
 }

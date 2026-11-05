@@ -48,6 +48,10 @@ export function migrate(g: any): GameState | null {
     for (const po of g.poops ?? []) po.room ??= 'terrace';
     g.v = 5;
   }
+  if (g.v === 5) { // v5 → v6: นาฬิกาดูแลสุขภาพ (ค่าเดิมเก็บเป็นวันในเกม → ตั้งนาฬิกาเท่าวันปัจจุบัน)
+    for (const p of g.pets ?? []) p.careClock ??= g.day;
+    g.v = 6;
+  }
   return g as GameState;
 }
 
