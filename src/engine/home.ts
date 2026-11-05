@@ -41,7 +41,7 @@ export const FLOORS: Record<RoomKey, [number, number]> = { terrace: [40, 208], r
 /** ชานบ้าน (เดิม) — คงไว้ให้โค้ดเก่า */
 export const FLOOR = FLOORS.terrace;
 /** แนวชายคาที่แขวนของได้ (พิกัดโลก) — ในบ้านไม่มี */
-export const HANG: Record<RoomKey, [number, number] | null> = { terrace: [72, 120], room: null };
+export const HANG: Record<RoomKey, [number, number] | null> = { terrace: [54, 116], room: null };
 export const POOP_CAP = 4;            // อึบนพื้นสะสมได้สูงสุด (กันกลับมาเจอบ้านพัง)
 export const HYGIENE = {
   cleanMultPerPoop: 0.2,              // ความสกปรกเพิ่มเร็วขึ้นต่ออึ 1 กอง

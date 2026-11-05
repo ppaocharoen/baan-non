@@ -49,7 +49,24 @@ export const ITEM_H: Record<string, number> = { bed: 8, coolmat: 3, condo: 32, c
 /** ขนาดของในฉากเทียบกับแบบที่วาด (ให้เข้ากับตัวน้อง) */
 export const ITEM_SCALE = 1.6;
 
-export function drawItem(c: CanvasRenderingContext2D, key: string, x: number, y: number, rx: (v: number) => number, t = 0, fill = 0, cap = 0, night = 0, S = ITEM_SCALE) {
+/** วาดของ + อึ · tilt = เลื่อน x ต่อความสูง 1 หน่วยของผิวบน (มุมมอง) — ผนังด้านหน้าคงตรง ผิวบนเอียงเข้าจุดลับตา */
+export function drawItem(c: CanvasRenderingContext2D, key: string, x: number, y: number, rx: (v: number) => number, t = 0, fill = 0, cap = 0, night = 0, S = ITEM_SCALE, tilt = 0) {
+  if (tilt) {
+    const h = itemHeight(key, S), yf = y - h * (FRONT[key] ?? 0.35);
+    // ผนังด้านหน้า (ล่าง) วาดตรง
+    c.save(); c.beginPath(); c.rect(x - 200, yf, 400, h + 4); c.clip();
+    drawBody(c, key, x, y, rx, t, night, S); c.restore();
+    // ผิวบน: เฉือนรอบขอบบนของผนังหน้า
+    c.save(); c.beginPath(); c.rect(x - 200, y - h - 40, 400, h + 40 - (y - yf)); c.clip();
+    c.transform(1, 0, tilt, 1, -tilt * yf, 0);
+    drawBody(c, key, x, y, rx, t, night, S); c.restore();
+  } else drawBody(c, key, x, y, rx, t, night, S);
+  drawFill(c, key, x, y, rx, fill, cap, S, tilt);
+}
+/** สัดส่วนความสูงของผนังด้านหน้าในภาพ (ส่วนที่ไม่เอียง) */
+const FRONT: Record<string, number> = { litter: 0.4, peepad: 0.35, bowl: 0.5, bed: 0.4, coolmat: 0.35, rug: 0.3 };
+
+function drawBody(c: CanvasRenderingContext2D, key: string, x: number, y: number, rx: (v: number) => number, t: number, night: number, S: number) {
   const r: R = (dx, dy, w, h, col) => { c.fillStyle = col; c.fillRect(rx(x + dx * S), rx(y + dy * S), rx(w * S), rx(h * S)); };
   if (sprite(c, key, x, y, rx, S)) {
     if (key === 'lamp' && night > 0.3) { c.fillStyle = `rgba(255,210,120,${0.18 * night})`; c.fillRect(rx(x - 12 * S), rx(y - 24 * S), rx(24 * S), rx(24 * S)); }
@@ -66,7 +83,7 @@ export function drawItem(c: CanvasRenderingContext2D, key: string, x: number, y:
       r(-4, -12, 8, 9, P.woodD); r(-3, -11, 6, 7, P.ink);
       break;
     case 'cage': {
-      r(-9, -3, 18, 3, P.goldD); r(-8, -2, 16, 1, fill > 0 ? P.sand : P.gold);
+      r(-9, -3, 18, 3, P.goldD); r(-8, -2, 16, 1, P.gold);
       for (let i = -8; i <= 8; i += 3) r(i, -22, 1, 19, P.gold);
       r(-8, -23, 17, 1, P.goldD); r(-6, -25, 13, 2, P.goldD); r(-1, -27, 2, 2, P.goldD);
       r(-5, -12, 10, 1, P.woodD);
@@ -105,6 +122,10 @@ export function drawItem(c: CanvasRenderingContext2D, key: string, x: number, y:
       r(-15, -2, 30, 2, P.redD); r(-14, -2, 28, 1, P.red); for (let i = -12; i < 14; i += 5) r(i, -2, 2, 1, P.gold);
       break;
   }
+}
+
+function drawFill(c: CanvasRenderingContext2D, key: string, x: number, y: number, rx: (v: number) => number, fill: number, cap: number, S: number, tilt: number) {
+  const r: R = (dx, dy, w, h, col) => { c.fillStyle = col; c.fillRect(rx(x + dx * S), rx(y + dy * S), rx(w * S), rx(h * S)); };
   // ห้องน้ำ/ถาด: บอกว่าเต็มแค่ไหน
   if (cap > 0 && fill > 0) {
     // อึในถาด/ขี้นกในกรง ใช้ภาพจริง วางกระจายบนผิวทราย (แถวหลังสูงกว่าเล็กน้อย)
@@ -112,7 +133,8 @@ export function drawItem(c: CanvasRenderingContext2D, key: string, x: number, y:
     const spots = [[-0.18, 0], [0.16, 1], [0.02, 0], [-0.3, 1], [0.3, 0], [-0.05, 1]];
     for (let i = 0; i < n; i++) {
       const [fx, back] = spots[i];
-      const px = x + fx * tw * (bird ? 0.8 : 1), py = bird ? y - th * 0.07 : y - th * (0.32 + back * 0.14);
+      const py = bird ? y - th * 0.07 : y - th * (0.32 + back * 0.14);
+      const yf = y - th * (FRONT[key] ?? 0.35), px = x + fx * tw * (bird ? 0.8 : 1) + (py < yf ? tilt * (py - yf) : 0);
       if (!spriteW(c, bird ? 'dropping' : 'poop', px, py, rx, tw * (bird ? 0.17 : 0.2))) r(-7 + i * 3, bird ? -2 : -6, 2, 2, P.poop);
     }
     if (fill >= cap) { r(-1, -18, 2, 5, '#A32D2D'); r(-1, -12, 2, 2, '#A32D2D'); }

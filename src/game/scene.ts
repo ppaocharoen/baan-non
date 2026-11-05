@@ -15,17 +15,27 @@ const GROUND = 142;
 /** แนวเท้าของแถวของ: 0 = แถวหลัง · 1 = แถวหน้า */
 const LANE_Y = [GROUND + 2, GROUND + 16];
 /** แนวชายคาที่แขวนของ (ความสูงโลก) และความยาวสายแขวน */
-const HANG_Y = 47, CHAIN = 16;
+const CHAIN = 16;
+/** แนวขอบล่างโครงหลังคา (จันทัน/เชิงชาย) ของชานบ้าน วัดจากภาพฉาก: [x, y] โลก — จุดผูกสายแขวน */
+const EAVE: [number, number][] = [[50, 35], [70.4, 39], [118.5, 45]];
+const eaveY = (x: number) => {
+  for (let i = 1; i < EAVE.length; i++) if (x <= EAVE[i][0] || i === EAVE.length - 1) {
+    const [x0, y0] = EAVE[i - 1], [x1, y1] = EAVE[i];
+    return y0 + ((x - x0) * (y1 - y0)) / (x1 - x0);
+  }
+  return EAVE[0][1];
+};
 /** ของเตี้ยแบบถาด/เบาะ ที่ต้องเอียงตามมุมมอง */
 const PERSPECTIVE = new Set(['bed', 'coolmat', 'litter', 'peepad', 'bowl', 'rug']);
 
 /** who: all = ทุกตัว · climber = แมวกับนก · bird = นกเท่านั้น */
 interface Perch { x0: number; x1: number; y: number; label: string; who: 'all' | 'climber' | 'bird'; cage?: number }
-interface RoomDef { bg: string; door: number; perches: Perch[]; ambient: boolean; name: string; }
+/** vp = จุดลับตาของภาพฉาก [x, y] (วัดจากเส้นพื้น/ผนัง/คานในภาพ) */
+interface RoomDef { bg: string; door: number; perches: Perch[]; ambient: boolean; name: string; vp: [number, number]; }
 /** ที่สูงของแต่ละห้อง (พิกัดโลก) — ช่อง 0 คือพื้นเสมอ */
 const ROOMS: Record<RoomKey, RoomDef> = {
   terrace: {
-    bg: 'bg_home', door: 44, ambient: true, name: 'ชานบ้าน',
+    bg: 'bg_home', door: 44, ambient: true, name: 'ชานบ้าน', vp: [120, 70],
     perches: [
       { x0: FLOORS.terrace[0], x1: FLOORS.terrace[1], y: GROUND + 4, label: '', who: 'all' },
       { x0: 89, x1: 130, y: 108, label: 'นั่งบนม้านั่ง', who: 'all' },
@@ -35,7 +45,7 @@ const ROOMS: Record<RoomKey, RoomDef> = {
     ],
   },
   room: {
-    bg: 'bg_room', door: 158, ambient: false, name: 'ในบ้าน',
+    bg: 'bg_room', door: 158, ambient: false, name: 'ในบ้าน', vp: [122, 62],
     perches: [
       { x0: FLOORS.room[0], x1: FLOORS.room[1], y: GROUND + 4, label: '', who: 'all' },
       { x0: 50, x1: 134, y: 124, label: 'เดินบนฟูก', who: 'all' },
@@ -215,7 +225,7 @@ export class Scene {
     const base = ROOMS[room].perches;
     if (!this.g) return base;
     const cages = placed(this.g).filter(i => i.room === room && i.lane === 2).map(i => {
-      const h = itemHeight(i.key), bottom = HANG_Y + CHAIN + h;
+      const h = itemHeight(i.key), bottom = eaveY(i.x!) + CHAIN + h;
       return { x0: i.x! - 4, x1: i.x! + 4, y: bottom - h * 0.3, label: 'นอนในกรง', who: 'bird' as const, cage: i.uid };
     });
     return [...base, ...cages];
@@ -478,13 +488,13 @@ export class Scene {
 
   private drawHomeItem(it: HomeItem, n: number) {
     const f = furnitureOf(it.key), x = it.x! - this.camX, h = itemHeight(it.key), fw = f.w * ITEM_SCALE;
-    const y = it.lane === 2 ? HANG_Y + CHAIN + h : LANE_Y[it.lane];
-    if (it.lane === 2) { this.ctx.fillStyle = '#5a4630'; this.ctx.fillRect(this.rx(x - 0.3), HANG_Y, this.rx(0.6) || 1 / this.K, CHAIN + 1); }
+    const top = eaveY(it.x!), y = it.lane === 2 ? top + CHAIN + h : LANE_Y[it.lane];
+    if (it.lane === 2) { this.ctx.fillStyle = '#5a4630'; this.ctx.fillRect(this.rx(x - 0.3), this.rx(top), this.rx(0.6) || 1 / this.K, CHAIN + 1); }
     // ของเตี้ยที่ภาพวาดมองจากตรงกลาง: เอียงขอบบนเข้าหาจุดลับตาของฉาก ให้เข้ากับมุมกล้องเมื่อวางชิดซ้าย/ขวา
-    const tilt = PERSPECTIVE.has(it.key) ? clamp(-(this.worldWOf(it.room) / 2 - it.x!) * 0.004, -0.4, 0.4) : 0;
-    if (tilt) { this.ctx.save(); this.ctx.transform(1, 0, tilt, 1, -tilt * y, 0); }
-    drawItem(this.ctx, it.key, x, y, this.rx, this.t, it.fill, toiletCap(f), n);
-    if (tilt) this.ctx.restore();
+    // เส้นลึกที่ผ่านฐานของ → จุดลับตา: เลื่อน x ต่อความสูง 1 หน่วย = (vpX − x) / (ฐาน − vpY)
+    const [vx, vy] = ROOMS[it.room].vp;
+    const tilt = PERSPECTIVE.has(it.key) && it.lane !== 2 ? clamp((-(vx - it.x!) / (y - vy)) * 0.9, -1.1, 1.1) : 0;
+    drawItem(this.ctx, it.key, x, y, this.rx, this.t, it.fill, toiletCap(f), n, ITEM_SCALE, tilt);
     this.hits.push({ kind: 'item', id: it.uid, x: it.x! - fw / 2, y: y - h, w: fw, h: Math.max(h, 8) });
     if (this.editMode) {
       const c = this.ctx;
