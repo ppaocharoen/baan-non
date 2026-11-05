@@ -25,9 +25,9 @@
   </div>
   <div class="dev">
     <header class="top">
-      <button class="chip" id="chip-time" aria-label="เวลาในเกม"><span id="ic-time" class="ic2 sm" data-i="4"></span><span id="time"></span></button>
+      <button class="chip" id="chip-time" aria-label="เวลาในเกม"><img id="ic-time" class="ui sm" src="./art/ui/sun.png" alt="" /><span id="time"></span></button>
       <button class="chip" id="chip-money" aria-label="เงิน"><img class="coin" src="./art/coin.png" alt="" /><span id="money"></span></button>
-      <button class="chip" id="chip-fans" aria-label="ผู้ติดตาม"><span class="ic2 sm" data-i="3"></span><span id="fans">0</span></button>
+      <button class="chip" id="chip-fans" aria-label="ผู้ติดตาม"><img class="ui sm" src="./art/ui/heart.png" alt="" /><span id="fans">0</span></button>
     </header>
     <div class="lcd">
       <div class="scr" id="scr">
@@ -40,8 +40,8 @@
         </button>
         <button class="nav" id="prev" aria-label="น้องตัวก่อนหน้า">❮</button>
         <button class="nav r" id="next" aria-label="น้องตัวถัดไป">❯</button>
-        <button class="roombtn" id="room-btn">🏠 เข้าบ้าน</button>
-        <button class="cam" id="cam" aria-label="ถ่ายรูป"><span class="ic2" data-i="8"></span></button>
+        <button class="roombtn" id="room-btn"><img class="ui sm" id="room-ic" src="./art/ui/house.png" alt="" /><span id="room-label">เข้าบ้าน</span></button>
+        <button class="cam" id="cam" aria-label="ถ่ายรูป"><img class="ui" src="./art/ui/camera.png" alt="" /></button>
         <div class="floats" id="floats"></div>
         <div class="banner" id="banner"></div>
         <div class="toast" id="toast"></div>
@@ -50,14 +50,14 @@
       </div>
     </div>
     <nav class="btns" id="btns">
-      <button data-act="feed"><span class="ic" data-ic="0"></span>กิน<i class="dot"></i></button>
-      <button data-act="bathe"><span class="ic" data-ic="4"></span>อาบน้ำ<i class="dot"></i></button>
-      <button data-act="train"><span class="ic2" data-i="0"></span>ฝึก<i class="dot"></i></button>
-      <button data-act="clinic"><span class="ic" data-ic="8"></span>คลินิก<i class="dot"></i></button>
-      <button data-act="shop"><canvas class="thumb" data-thumb="bed"></canvas>ร้าน<i class="dot"></i></button>
-      <button data-act="decor"><span class="ic2" data-i="11"></span>จัดบ้าน<i class="dot"></i></button>
-      <button data-act="page"><span class="ic2" data-i="1"></span>เพจ<i class="dot"></i></button>
-      <button data-act="menu"><span class="ic2" data-i="9"></span>เมนู<i class="dot"></i></button>
+      <button data-act="feed"><img class="ui" src="./art/ui/feed.png" alt="" />กิน<i class="dot"></i></button>
+      <button data-act="bathe"><img class="ui" src="./art/ui/bathe.png" alt="" />อาบน้ำ<i class="dot"></i></button>
+      <button data-act="train"><img class="ui" src="./art/ui/train.png" alt="" />ฝึก<i class="dot"></i></button>
+      <button data-act="clinic"><img class="ui" src="./art/ui/clinic.png" alt="" />คลินิก<i class="dot"></i></button>
+      <button data-act="shop"><img class="ui" src="./art/ui/shop.png" alt="" />ร้าน<i class="dot"></i></button>
+      <button data-act="decor"><img class="ui" src="./art/ui/house.png" alt="" />จัดบ้าน<i class="dot"></i></button>
+      <button data-act="page"><img class="ui" src="./art/ui/page.png" alt="" />เพจ<i class="dot"></i></button>
+      <button data-act="menu"><img class="ui" src="./art/ui/menu.png" alt="" />เมนู<i class="dot"></i></button>
     </nav>
   </div>
   <script type="module" src="/src/game/main.ts"></script>

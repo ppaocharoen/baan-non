@@ -3,7 +3,7 @@
 // รับแตะ/กดค้าง/ปัด · โหมดจัดบ้านลากของได้
 import { breedOf, foodOf, type Breed } from '../engine/content';
 import type { GameState } from '../engine/core';
-import { assignBeds, fits, FLOORS, furnitureOf, placed, toiletCap, type HomeItem, type RoomKey } from '../engine/home';
+import { assignBeds, fits, FLOORS, furnitureOf, HANG, placed, toiletCap, type HomeItem, type Lane, type RoomKey } from '../engine/home';
 import { isPostVax, isSick, petStage, type Pet } from '../engine/pet';
 import { nightness } from '../engine/time';
 import { Ambient } from './ambient';
@@ -14,8 +14,11 @@ const WORLD_H = 168;
 const GROUND = 142;
 /** แนวเท้าของแถวของ: 0 = แถวหลัง · 1 = แถวหน้า */
 const LANE_Y = [GROUND + 2, GROUND + 16];
+/** แนวชายคาที่แขวนของ (ความสูงโลก) และความยาวสายแขวน */
+const HANG_Y = 47, CHAIN = 16;
 
-interface Perch { x0: number; x1: number; y: number; label: string; who: 'all' | 'climber' }
+/** who: all = ทุกตัว · climber = แมวกับนก · bird = นกเท่านั้น */
+interface Perch { x0: number; x1: number; y: number; label: string; who: 'all' | 'climber' | 'bird'; cage?: number }
 interface RoomDef { bg: string; door: number; perches: Perch[]; ambient: boolean; name: string; }
 /** ที่สูงของแต่ละห้อง (พิกัดโลก) — ช่อง 0 คือพื้นเสมอ */
 const ROOMS: Record<RoomKey, RoomDef> = {
@@ -25,14 +28,19 @@ const ROOMS: Record<RoomKey, RoomDef> = {
       { x0: FLOORS.terrace[0], x1: FLOORS.terrace[1], y: GROUND + 4, label: '', who: 'all' },
       { x0: 89, x1: 130, y: 108, label: 'นั่งบนม้านั่ง', who: 'all' },
       { x0: 72, x1: 162, y: 90, label: 'เดินบนราวระเบียง', who: 'climber' },
+      { x0: 225, x1: 247, y: 124, label: 'เกาะขอบโอ่ง', who: 'bird' },
+      { x0: 199, x1: 221, y: 143, label: 'เกาะขอบกระถาง', who: 'bird' },
     ],
   },
   room: {
     bg: 'bg_room', door: 158, ambient: false, name: 'ในบ้าน',
     perches: [
       { x0: FLOORS.room[0], x1: FLOORS.room[1], y: GROUND + 4, label: '', who: 'all' },
-      { x0: 58, x1: 132, y: 124, label: 'นอนบนฟูก', who: 'all' },
+      { x0: 50, x1: 134, y: 124, label: 'เดินบนฟูก', who: 'all' },
+      { x0: 81, x1: 133, y: 111, label: 'นอนบนม้วนเสื่อ', who: 'climber' },
       { x0: 204, x1: 236, y: 105, label: 'นั่งริมหน้าต่าง', who: 'climber' },
+      { x0: 199, x1: 218, y: 97, label: 'นั่งบนทีวี', who: 'climber' },
+      { x0: 101, x1: 143, y: 30, label: 'เกาะใบพัดลม', who: 'bird' },
     ],
   },
 };
@@ -57,7 +65,7 @@ export interface SceneInput {
   onHoldPet(id: number): void;
   onTapPoop(id: number): void;
   onTapItem(uid: number): void;
-  onMoveItem(uid: number, x: number, lane: 0 | 1): void;
+  onMoveItem(uid: number, x: number, lane: Lane): void;
   onRoomChange?(room: RoomKey): void;
 }
 
@@ -156,7 +164,10 @@ export class Scene {
       if (!down.moved) return;
       if (this.drag) {
         const w = this.toWorld(e.clientX, e.clientY);
-        input.onMoveItem(this.drag.uid, w.x - this.drag.dx, w.y > GROUND + 7 ? 1 : 0);
+        const it = this.g?.items.find(i => i.uid === this.drag!.uid);
+        const canHang = !!it && !!furnitureOf(it.key).hang && !!HANG[this.viewRoom];
+        const lane: Lane = canHang && w.y < GROUND - 40 ? 2 : w.y > GROUND + 7 ? 1 : 0;
+        input.onMoveItem(this.drag.uid, w.x - this.drag.dx, lane);
         const sx = w.x - this.camX;
         if (sx < 12) this.camX = this.clampCam(this.camX - 1.5);
         if (sx > this.viewW - 12) this.camX = this.clampCam(this.camX + 1.5);
@@ -197,6 +208,20 @@ export class Scene {
   }
 
   private petOf(id: number) { return this.g?.pets.find(p => p.id === id); }
+  /** ที่สูงของห้อง = ที่ตายตัว + กรงนกที่แขวนอยู่ */
+  private perchesOf(room: RoomKey): Perch[] {
+    const base = ROOMS[room].perches;
+    if (!this.g) return base;
+    const cages = placed(this.g).filter(i => i.room === room && i.lane === 2).map(i => {
+      const h = itemHeight(i.key), bottom = HANG_Y + CHAIN + h;
+      return { x0: i.x! - 4, x1: i.x! + 4, y: bottom - h * 0.3, label: 'นอนในกรง', who: 'bird' as const, cage: i.uid };
+    });
+    return [...base, ...cages];
+  }
+  private canUse(q: Perch, p: Pet) {
+    const sp = breedOf(p.breed).species;
+    return q.who === 'all' || (q.who === 'climber' && sp !== 'dog') || (q.who === 'bird' && sp === 'bird');
+  }
   private itemOf(kind: string, p: Pet, g: GameState): HomeItem | undefined {
     const ok = placed(g).filter(i => { const f = furnitureOf(i.key); return (f.kind === kind || (kind === 'toy' && f.toy)) && fits(f, p); });
     return ok.find(i => i.room === p.room) ?? ok[0];
@@ -227,13 +252,13 @@ export class Scene {
     const room = plan.room ?? p.room, tp = room === p.room ? plan.perch ?? 0 : 0;
     // ต้องลงจากที่สูงก่อน (หรือกระโดดตรงไปที่สูงอีกที่ถ้าอยู่ในแนว)
     if (a.perch && a.perch !== tp) {
-      const per = ROOMS[p.room].perches[tp];
+      const per = this.perchesOf(p.room)[tp];
       this.startJump(a, tp && a.x >= per.x0 && a.x <= per.x1 ? tp : 0, a.x);
       return;
     }
     const fl = FLOORS[p.room];
     if (room !== p.room) a.target = ROOMS[p.room].door;
-    else if (a.perch) { const per = ROOMS[p.room].perches[a.perch]; a.target = clamp(plan.x, per.x0 + 3, per.x1 - 3); }
+    else if (a.perch) { const per = this.perchesOf(p.room)[a.perch]; a.target = clamp(plan.x, per.x0 + 3, per.x1 - 3); }
     else a.target = clamp(plan.x, fl[0], fl[1]);
     a.action = 'walk';
   }
@@ -254,19 +279,27 @@ export class Scene {
   actorState(id: number) {
     const a = this.actors.get(id), p = this.petOf(id);
     if (!a || !p) return null;
-    return { action: a.action, perch: a.perch, perchLabel: ROOMS[p.room].perches[a.perch]?.label ?? '', jumping: a.jump > 0, x: a.x, inView: p.room === this.viewRoom && a.door === 0 };
+    const q = this.perchesOf(p.room)[a.perch];
+    return { action: a.action, perch: a.perch, perchLabel: q?.label ?? '', perchSpecial: !!q && q.who !== 'all', jumping: a.jump > 0, x: a.x, inView: p.room === this.viewRoom && a.door === 0 };
   }
 
+  /** ถ่ายรูป: วาดฉากใหม่ที่ขนาด 4 พิกเซลจอต่อพิกเซลเกมพอดี (คมทุกพิกเซล ไม่เบลอ) */
   snapshot(): string {
-    const src = this.canvas, w = 240, h = Math.round((src.height / src.width) * w);
+    const S = 4, w = Math.round(this.viewW * S), h = WORLD_H * S;
     const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
-    const c = cv.getContext('2d')!;
-    c.imageSmoothingEnabled = true;
-    c.drawImage(src, 0, 0, w, h);
-    c.font = '13px Itim, sans-serif'; c.textAlign = 'right';
-    c.fillStyle = 'rgba(0,0,0,0.35)'; c.fillText('🐾 บ้านน้อน', w - 7, h - 7);
-    c.fillStyle = '#fff'; c.fillText('🐾 บ้านน้อน', w - 8, h - 8);
-    return cv.toDataURL('image/jpeg', 0.78);
+    const keep = { canvas: this.canvas, ctx: this.ctx, K: this.K, hits: this.hits };
+    (this as unknown as { canvas: HTMLCanvasElement }).canvas = cv;
+    this.ctx = cv.getContext('2d')!; this.K = S;
+    if (this.g) this.draw(this.g);
+    const c = this.ctx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.font = `${7 * S}px Itim, sans-serif`; c.textAlign = 'right';
+    c.fillStyle = 'rgba(0,0,0,0.4)'; c.fillText('🐾 บ้านน้อน', w - 3 * S + 2, h - 3 * S + 2);
+    c.fillStyle = '#fff'; c.fillText('🐾 บ้านน้อน', w - 3 * S, h - 3 * S);
+    const url = cv.toDataURL('image/jpeg', 0.9);
+    (this as unknown as { canvas: HTMLCanvasElement }).canvas = keep.canvas;
+    this.ctx = keep.ctx; this.K = keep.K; this.hits = keep.hits;
+    return url;
   }
 
   private sync(g: GameState) {
@@ -296,7 +329,10 @@ export class Scene {
     // กลางคืน: ไปนอนที่นอนของตัวเอง (ข้ามห้องได้)
     if (night || (stage === 2 && Math.random() < 0.5)) {
       const bed = assignBeds(g).get(p.id);
-      if (bed && bed.x !== null && (bed.room !== p.room || Math.abs(a.x - bed.x) > 2)) { this.go(a, { x: bed.x, action: 'sleep', dur: 30, room: bed.room }); return; }
+      if (bed && bed.x !== null && bed.lane === 2) {
+        const idx = this.perchesOf(bed.room).findIndex(q => q.cage === bed.uid);
+        if (bed.room !== p.room || a.perch !== idx) { this.go(a, { x: bed.x, action: 'sleep', dur: 30, room: bed.room, perch: idx }); return; }
+      } else if (bed && bed.x !== null && (bed.room !== p.room || Math.abs(a.x - bed.x) > 2)) { this.go(a, { x: bed.x, action: 'sleep', dur: 30, room: bed.room }); return; }
       a.action = 'sleep'; a.nextThink = this.t + 6 + Math.random() * 6; return;
     }
     if (lazy || Math.random() > 0.7) { a.action = 'idle'; return; }
@@ -308,11 +344,11 @@ export class Scene {
     }
     // กระโดดขึ้นที่สูง (หรือลงมา) — บางที่เฉพาะแมว/นก
     const sp = breedOf(p.breed).species, climber = sp === 'cat' || sp === 'bird';
-    const perches = ROOMS[p.room].perches;
+    const perches = this.perchesOf(p.room);
     if (canJump && Math.random() < (climber ? 0.25 : 0.18)) {
       const fl = FLOORS[p.room];
       if (a.perch) { this.go(a, { x: clamp(a.x + (Math.random() - 0.5) * 60, fl[0], fl[1]), action: 'idle', dur: 0 }); return; }
-      const opts = perches.map((q, i) => ({ q, i })).filter(o => o.i > 0 && (o.q.who === 'all' || climber));
+      const opts = perches.map((q, i) => ({ q, i })).filter(o => o.i > 0 && this.canUse(o.q, p));
       const { q, i } = opts[Math.floor(Math.random() * opts.length)];
       const px = q.x0 + 4 + Math.random() * (q.x1 - q.x0 - 8);
       this.go(a, { x: px, action: Math.random() < 0.35 ? 'sleep' : 'idle', dur: 6 + Math.random() * 8, perch: i });
@@ -333,7 +369,8 @@ export class Scene {
       const a = this.actors.get(p.id);
       if (!a) continue;
       this.think(a, p, g);
-      const perches = ROOMS[p.room].perches, fl = FLOORS[p.room];
+      const perches = this.perchesOf(p.room), fl = FLOORS[p.room];
+      if (a.perch >= perches.length) { a.perch = 0; a.jump = 0; } // กรงถูกย้ายออก
       // ผ่านประตู: จางหายจากห้องนี้ แล้วโผล่อีกห้อง
       if (a.door > 0) {
         a.door -= dt;
@@ -412,7 +449,9 @@ export class Scene {
     const here = placed(g).filter(i => i.room === room);
     const pets = g.pets.filter(p => p.room === room && this.actors.has(p.id)).map(p => ({ p, a: this.actors.get(p.id)! }));
     const flat = (k: string) => k === 'rug' || k === 'coolmat' || k === 'peepad';
-    for (const k of [2, 1]) for (const { p, a } of pets.filter(x => x.a.perch === k && x.a.jump === 0).sort((u, v) => u.a.x - v.a.x)) this.drawPet(p, a, g);
+    // น้องบนที่สูง (สูงสุดอยู่หลังสุด) — ยกเว้นในกรงแขวนที่วาดพร้อมกรง
+    const perchesHere = this.perchesOf(room);
+    for (const { p, a } of pets.filter(x => x.a.perch > 0 && x.a.jump === 0 && !perchesHere[x.a.perch]?.cage).sort((u, v) => perchesHere[u.a.perch].y - perchesHere[v.a.perch].y)) this.drawPet(p, a, g);
     for (const it of here.filter(i => flat(i.key))) this.drawHomeItem(it, n);
     for (const it of here.filter(i => i.lane === 0 && !flat(i.key))) this.drawHomeItem(it, n);
     for (const po of g.poops.filter(x => x.room === room)) {
@@ -422,6 +461,12 @@ export class Scene {
     }
     for (const { p, a } of pets.filter(x => x.a.perch === 0 || x.a.jump > 0).sort((u, v) => u.a.x - v.a.x)) this.drawPet(p, a, g);
     for (const it of here.filter(i => i.lane === 1 && !flat(i.key))) this.drawHomeItem(it, n);
+    // กรงแขวนที่ชายคา: วาดนกข้างในก่อนแล้ววาดกรงทับ (ซี่กรงอยู่หน้านก)
+    for (const it of here.filter(i => i.lane === 2)) {
+      const idx = perchesHere.findIndex(q => q.cage === it.uid);
+      for (const { p, a } of pets.filter(x => x.a.perch === idx && x.a.jump === 0)) this.drawPet(p, a, g);
+      this.drawHomeItem(it, n);
+    }
     if (amb) this.ambient.drawFront(c, { camX: this.camX, s, rx: this.rx, n });
     if (this.editMode) {
       c.fillStyle = 'rgba(4,52,44,0.12)';
@@ -430,9 +475,10 @@ export class Scene {
   }
 
   private drawHomeItem(it: HomeItem, n: number) {
-    const f = furnitureOf(it.key), x = it.x! - this.camX, y = LANE_Y[it.lane];
+    const f = furnitureOf(it.key), x = it.x! - this.camX, h = itemHeight(it.key), fw = f.w * ITEM_SCALE;
+    const y = it.lane === 2 ? HANG_Y + CHAIN + h : LANE_Y[it.lane];
+    if (it.lane === 2) { this.ctx.fillStyle = '#5a4630'; this.ctx.fillRect(this.rx(x - 0.3), HANG_Y, this.rx(0.6) || 1 / this.K, CHAIN + 1); }
     drawItem(this.ctx, it.key, x, y, this.rx, this.t, it.fill, toiletCap(f), n);
-    const h = itemHeight(it.key), fw = f.w * ITEM_SCALE;
     this.hits.push({ kind: 'item', id: it.uid, x: it.x! - fw / 2, y: y - h, w: fw, h: Math.max(h, 8) });
     if (this.editMode) {
       const c = this.ctx;
@@ -448,8 +494,8 @@ export class Scene {
     const br: Breed = breedOf(p.breed), stage = petStage(p, g.day);
     const main = this.sheet(br.art), extra = this.sheet(`${br.art}_x`);
     if (!ready(main)) return;
-    const perches = ROOMS[p.room].perches;
-    let im = main, cols = 4, col = 0, scale = br.scale, lift = 0;
+    const perches = this.perchesOf(p.room);
+    let im = main, cols = 4, col = 0, scale = br.scale, lift = 0, row: number = stage;
     const step = Math.floor(a.walkT / (stage === 2 ? 0.28 : 0.18));
     let feet = perches[a.perch].y;
     if (a.jump > 0) {
@@ -458,7 +504,7 @@ export class Scene {
       col = br.species === 'bird' ? 1 : 3;
     }
     const bed = a.action === 'sleep' && !a.perch ? assignBeds(g).get(p.id) : undefined;
-    if (bed && bed.x !== null && bed.room === p.room && Math.abs(bed.x - a.x) < 3) feet = LANE_Y[bed.lane] - itemHeight(bed.key) * ({ bed: 0.35, coolmat: 0.3, condo: 0.86, cage: 0.3 }[bed.key] ?? 0.3);
+    if (bed && bed.x !== null && bed.lane !== 2 && bed.room === p.room && Math.abs(bed.x - a.x) < 3) feet = LANE_Y[bed.lane] - itemHeight(bed.key) * ({ bed: 0.35, coolmat: 0.3, condo: 0.86, cage: 0.3 }[bed.key] ?? 0.3);
     if (a.jump === 0) switch (a.action) {
       case 'walk':
         col = br.species === 'bird' ? 2 : 1 + (step % 2);
@@ -472,7 +518,8 @@ export class Scene {
         if (stage < 2) { col = 3; lift = Math.abs(Math.sin(this.t * 9)) * 5; }
         else if (ready(extra)) { im = extra; cols = 2; col = 1; scale = br.scale * br.xScale; }
         break;
-      case 'sleep': col = stage === 2 ? 3 : 0; break;
+      // ท่านอน: ชีตหลักมีท่าขดนอนแค่แถววัยชรา → ใช้ทุกวัย (ลูกสัตว์ย่อลง) จนกว่าจะมีชีตท่านอน
+      case 'sleep': col = 3; row = 2; if (stage === 0) scale *= 0.72; break;
       case 'squat': col = 0; lift = -0.5; break;
       default: col = 0;
     }
@@ -491,7 +538,7 @@ export class Scene {
     c.save();
     if (isSick(p)) c.filter = 'saturate(0.35) brightness(0.85)';
     if (a.face < 0) { c.translate(x * 2 + w, 0); c.scale(-1, 1); }
-    c.drawImage(im, col * fw, stage * fh, fw, fh, x, y, this.rx(w), this.rx(h));
+    c.drawImage(im, col * fw, row * fh, fw, fh, x, y, this.rx(w), this.rx(h));
     c.restore();
     c.globalAlpha = 1;
     if (a.action === 'sleep') {

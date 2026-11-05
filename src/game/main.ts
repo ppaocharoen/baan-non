@@ -19,7 +19,7 @@ import { petPitch, sfx } from './sound';
 import { itemThumb } from './furniture';
 import { CHANGELOG, VERSION } from './changelog';
 import { checkCode } from './codes';
-import { buyFurniture, buySupply, cleanPoop, emptyToilet, furnitureOf, placeItem, SHOP, storeItem, supplyOf, toiletCap, type Furniture } from '../engine/home';
+import { buyFurniture, buySupply, cleanPoop, emptyToilet, furnitureOf, HANG, placeItem, SHOP, storeItem, supplyOf, toiletCap, type Furniture } from '../engine/home';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -39,20 +39,6 @@ const voice = (p: Pet, mood: 'happy' | 'normal' | 'sad' = 'normal', delayMs = 0)
 };
 let selId: number | null = null;
 
-// ---------- ไอคอนจากชีต icons.png (4×3 ช่องละ 48×37) ----------
-function iconize(el: HTMLElement) {
-  const i = Number(el.dataset.i), w = el.offsetWidth || 30, h = el.offsetHeight || 23;
-  el.style.backgroundImage = 'url(./art/icons.png)';
-  el.style.backgroundSize = `${w * 4}px ${h * 3}px`;
-  el.style.backgroundPosition = `${-(i % 4) * w}px ${-Math.floor(i / 4) * h}px`;
-}
-document.querySelectorAll<HTMLElement>('.ic2').forEach(iconize);
-// ---------- ไอคอนปุ่มจากชีตไอเทม ----------
-for (const el of document.querySelectorAll<HTMLElement>('.ic')) {
-  const i = Number(el.dataset.ic);
-  el.style.backgroundImage = 'url(./art/items.png)';
-  el.style.backgroundPosition = `${-(i % 4) * 30}px ${-Math.floor(i / 4) * 25.23}px`;
-}
 
 // ---------- ฉาก ----------
 const scene = new Scene($<HTMLCanvasElement>('scene'), {
@@ -61,9 +47,11 @@ const scene = new Scene($<HTMLCanvasElement>('scene'), {
   onTapPoop: id => { if (g && cleanPoop(g, id).ok) { sfx.sweep(); toast('เก็บกวาดแล้ว ✨', 1200); } },
   onTapItem: uid => (scene.editMode ? itemMenu(uid) : useItem(uid)),
   onMoveItem: (uid, x, lane) => { if (g) placeItem(g, uid, x, lane); },
-  onRoomChange: room => { $('room-btn').textContent = room === 'terrace' ? '🏠 เข้าบ้าน' : '🌴 ออกชาน'; },
+  onRoomChange: room => {
+    $('room-label').textContent = room === 'terrace' ? 'เข้าบ้าน' : 'ออกชาน';
+    ($('room-ic') as HTMLImageElement).src = `./art/ui/${room === 'terrace' ? 'house' : 'sun'}.png`;
+  },
 });
-document.querySelectorAll<HTMLCanvasElement>('canvas[data-thumb]').forEach(cv => itemThumb(cv, cv.dataset.thumb!));
 
 // สำหรับทดสอบอัตโนมัติ
 (window as unknown as { __bn: unknown }).__bn = { scene, sfx, BREEDS, get g() { return g; } };
@@ -469,9 +457,11 @@ function itemMenu(uid: number) {
   scene.highlight = uid;
   const f = furnitureOf(it.key);
   const s = openPop(`${head(f.name)}<p>${f.desc}</p>
-    <button class="opt" id="lane"><span>ย้ายไป${it.lane ? 'แถวหลัง (ชิดราว)' : 'แถวหน้า'}</span>›</button>
+    ${it.lane === 2 ? '' : `<button class="opt" id="lane"><span>ย้ายไป${it.lane ? 'แถวหลัง (ชิดราว)' : 'แถวหน้า'}</span>›</button>`}
+    ${f.hang && HANG[it.room] ? `<button class="opt" id="hang"><span>${it.lane === 2 ? 'ปลดลงมาวางพื้น' : 'แขวนที่ชายคา'}</span>›</button>` : ''}
     <button class="opt" id="store"><span>เก็บเข้าคลัง</span>›</button>`);
-  s.querySelector('#lane')!.addEventListener('click', () => { placeItem(g!, uid, it.x ?? scene.viewCenter, it.lane ? 0 : 1); closePop(); });
+  s.querySelector('#lane')?.addEventListener('click', () => { placeItem(g!, uid, it.x ?? scene.viewCenter, it.lane ? 0 : 1); closePop(); });
+  s.querySelector('#hang')?.addEventListener('click', () => { placeItem(g!, uid, it.x ?? scene.viewCenter, it.lane === 2 ? 0 : 2); closePop(); toast(it.lane === 2 ? 'แขวนที่ชายคาแล้ว' : 'วางลงพื้นแล้ว'); });
   s.querySelector('#store')!.addEventListener('click', () => { storeItem(g!, uid); closePop(); toast('เก็บเข้าคลังแล้ว'); });
 }
 /** แตะของในฉาก (โหมดปกติ): ห้องน้ำ = เททิ้ง · อย่างอื่นบอกชื่อ */
@@ -523,8 +513,8 @@ function momentWatch(dt: number) {
   const home = g.pets.filter(p => p.status === 'home');
   const st = home.map(p => ({ p, s: scene.actorState(p.id) })).filter(x => x.s);
   const seen = st.filter(x => x.s!.inView);
-  const high = seen.find(x => x.s!.perch === 2 && !x.s!.jumping);
-  const mid = seen.find(x => x.s!.perch === 1 && !x.s!.jumping);
+  const high = seen.find(x => x.s!.perch > 0 && x.s!.perchSpecial && !x.s!.jumping);
+  const mid = seen.find(x => x.s!.perch > 0 && !x.s!.perchSpecial && !x.s!.jumping);
   const sleep = seen.find(x => x.s!.action === 'sleep');
   if (seen.length >= 2 && Math.abs(seen[0].s!.x - seen[1].s!.x) < 18) offerMoment('สองตัวอยู่ด้วยกัน', 1, [seen[0].p.id, seen[1].p.id]);
   else if (high) offerMoment(high.s!.perchLabel, 1, [high.p.id]);
@@ -596,7 +586,7 @@ function seg(id: string, v: number, warn = false) {
 function renderHud() {
   if (!g) return;
   const c = calendar(g.day), hh = Math.floor(c.hour), mm = Math.floor((c.hour - hh) * 60 / 10) * 10;
-  $('ic-time').dataset.i = nightness(g.day) > 0.5 ? '5' : '4'; iconize($('ic-time'));
+  ($('ic-time') as HTMLImageElement).src = `./art/ui/${nightness(g.day) > 0.5 ? 'moon' : 'sun'}.png`;
   $('time').textContent = `ฤดู${SEASONS[c.season]} วัน ${c.dayOfSeason} · ${hh}:${String(mm).padStart(2, '0')}`;
   $('money').textContent = fmtMoney(g.money);
   $('fans').textContent = fmtFans(g.social.followers);

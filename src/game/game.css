@@ -114,7 +114,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .splash .ver { position: absolute; bottom: calc(env(safe-area-inset-bottom) + 14px); margin: 0; color: var(--ink); }
 .ic2 { display: inline-block; width: 30px; height: 23px; background-repeat: no-repeat; image-rendering: pixelated; }
 .ic2.sm { width: 18px; height: 14px; }
-.coin { width: 16px; height: 16px; image-rendering: pixelated; vertical-align: -3px; margin-left: 2px; }
+.coin { width: auto; height: 16px; image-rendering: pixelated; vertical-align: -3px; margin-left: 2px; }
 .chip .coin { margin: 0; }
 .cam { position: absolute; right: 8px; top: 8px; width: 46px; height: 46px; border-radius: 50%; background: #FAC775; border: 3px solid #633806; display: none;
   align-items: center; justify-content: center; animation: campulse 0.9s ease-in-out infinite; }
@@ -136,3 +136,8 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .btnrow { display: flex; gap: 6px; } .btnrow .cta { flex: 1; }
 .roombtn { position: absolute; left: 8px; bottom: 8px; background: color-mix(in srgb, var(--lcd) 88%, transparent); border: 2px solid var(--lcd-ink); color: var(--lcd-ink);
   border-radius: 999px; padding: 3px 10px; font-size: 13px; }
+.ui { height: 24px; width: auto; max-width: 40px; image-rendering: pixelated; object-fit: contain; display: block; }
+.ui.sm { height: 15px; max-width: 22px; display: inline-block; }
+.btns .ui { margin-bottom: 2px; }
+.cam .ui { height: 26px; }
+.roombtn { display: flex; align-items: center; gap: 5px; }

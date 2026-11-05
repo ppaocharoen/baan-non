@@ -20,13 +20,17 @@ export interface Furniture {
   cap?: number; supply?: string;
   /** ที่นอนที่มีถาดรองขี้ในตัว (กรงนก): จุได้กี่ครั้ง */
   toilet?: number;
+  /** แขวนที่ชายคาได้ */
+  hang?: boolean;
 }
 export interface Supply { key: string; name: string; price: number; uses: number; desc: string; }
 export const SHOP = shopJson as { furniture: Furniture[]; supplies: Supply[] };
 export const furnitureOf = (k: string) => SHOP.furniture.find(f => f.key === k)!;
 export const supplyOf = (k: string) => SHOP.supplies.find(s => s.key === k)!;
 
-export interface HomeItem { uid: number; key: string; /** null = เก็บอยู่ในคลัง */ x: number | null; lane: 0 | 1; fill: number; room: RoomKey; }
+/** แถว: 0 หลัง · 1 หน้า · 2 แขวนที่ชายคา (เฉพาะของที่แขวนได้) */
+export type Lane = 0 | 1 | 2;
+export interface HomeItem { uid: number; key: string; /** null = เก็บอยู่ในคลัง */ x: number | null; lane: Lane; fill: number; room: RoomKey; }
 export interface Poop { id: number; x: number; day: number; petId: number; small: boolean; room: RoomKey; }
 
 /** ห้อง/ฉาก: ชานบ้านริมคลอง · ในบ้าน */
@@ -36,6 +40,8 @@ export const ROOM_KEYS: RoomKey[] = ['terrace', 'room'];
 export const FLOORS: Record<RoomKey, [number, number]> = { terrace: [40, 208], room: [32, 175] };
 /** ชานบ้าน (เดิม) — คงไว้ให้โค้ดเก่า */
 export const FLOOR = FLOORS.terrace;
+/** แนวชายคาที่แขวนของได้ (พิกัดโลก) — ในบ้านไม่มี */
+export const HANG: Record<RoomKey, [number, number] | null> = { terrace: [72, 120], room: null };
 export const POOP_CAP = 4;            // อึบนพื้นสะสมได้สูงสุด (กันกลับมาเจอบ้านพัง)
 export const HYGIENE = {
   cleanMultPerPoop: 0.2,              // ความสกปรกเพิ่มเร็วขึ้นต่ออึ 1 กอง
@@ -125,11 +131,13 @@ export function buySupply(g: GameState, key: string): Result {
   g.supplies[key] = (g.supplies[key] ?? 0) + s.uses;
   return { ok: true };
 }
-export function placeItem(g: GameState, uid: number, x: number, lane: 0 | 1 = 0, room?: RoomKey): Result {
+export function placeItem(g: GameState, uid: number, x: number, lane: Lane = 0, room?: RoomKey): Result {
   const it = g.items.find(i => i.uid === uid);
   if (!it) return fail('ไม่พบของ');
   if (room) it.room = room;
-  const fl = FLOORS[it.room];
+  const hang = HANG[it.room];
+  if (lane === 2 && !(furnitureOf(it.key).hang && hang)) lane = 0; // แขวนไม่ได้ → วางพื้น
+  const fl = lane === 2 ? hang! : FLOORS[it.room];
   it.x = Math.max(fl[0], Math.min(fl[1], x)); it.lane = lane;
   return { ok: true };
 }
