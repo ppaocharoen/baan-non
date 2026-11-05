@@ -25,8 +25,6 @@ const eaveY = (x: number) => {
   }
   return EAVE[0][1];
 };
-/** ของเตี้ยแบบถาด/เบาะ ที่ต้องเอียงตามมุมมอง */
-const PERSPECTIVE = new Set(['bed', 'coolmat', 'litter', 'peepad', 'bowl', 'rug']);
 
 /** who: all = ทุกตัว · climber = แมวกับนก · bird = นกเท่านั้น */
 interface Perch { x0: number; x1: number; y: number; label: string; who: 'all' | 'climber' | 'bird'; cage?: number }
@@ -491,10 +489,7 @@ export class Scene {
     const top = eaveY(it.x!), y = it.lane === 2 ? top + CHAIN + h : LANE_Y[it.lane];
     if (it.lane === 2) { this.ctx.fillStyle = '#5a4630'; this.ctx.fillRect(this.rx(x - 0.3), this.rx(top), this.rx(0.6) || 1 / this.K, CHAIN + 1); }
     // ของเตี้ยที่ภาพวาดมองจากตรงกลาง: เอียงขอบบนเข้าหาจุดลับตาของฉาก ให้เข้ากับมุมกล้องเมื่อวางชิดซ้าย/ขวา
-    // เส้นลึกที่ผ่านฐานของ → จุดลับตา: เลื่อน x ต่อความสูง 1 หน่วย = (vpX − x) / (ฐาน − vpY)
-    const [vx, vy] = ROOMS[it.room].vp;
-    const tilt = PERSPECTIVE.has(it.key) && it.lane !== 2 ? clamp((-(vx - it.x!) / (y - vy)) * 0.9, -1.1, 1.1) : 0;
-    drawItem(this.ctx, it.key, x, y, this.rx, this.t, it.fill, toiletCap(f), n, ITEM_SCALE, tilt);
+    drawItem(this.ctx, it.key, x, y, this.rx, this.t, it.fill, toiletCap(f), n);
     this.hits.push({ kind: 'item', id: it.uid, x: it.x! - fw / 2, y: y - h, w: fw, h: Math.max(h, 8) });
     if (this.editMode) {
       const c = this.ctx;
