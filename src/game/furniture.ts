@@ -1,12 +1,15 @@
-// ภาพของในบ้าน: ใช้ชีต furniture.png (ตำแหน่งแต่ละชิ้นใน data/furniture-atlas.json)
+// ภาพของในบ้าน: ใช้ชีต furniture_v3.png (ตำแหน่งแต่ละชิ้นใน data/furniture-atlas.json)
 // ถ้าภาพยังไม่โหลด วาดแบบพิกเซลด้วยโค้ดแทน · พิกัดเป็นพิกเซลเกม · (x, y) = กึ่งกลางล่างของชิ้น
 import atlasJson from '../../data/furniture-atlas.json';
 import { furnitureOf } from '../engine/home';
 
 const ATLAS = atlasJson as unknown as Record<string, [number, number, number, number]>;
 const sheet = new Image();
-sheet.src = './art/furniture.png';
-const sheetReady = () => sheet.complete && sheet.naturalWidth > 0;
+// เปลี่ยนชื่อไฟล์ทุกครั้งที่ขนาดชีตเปลี่ยน (กันเครื่องที่แคชภาพเก่าไว้ใช้กรอบใหม่กับภาพเก่า)
+sheet.src = './art/furniture_v3.png';
+const SHEET_W = Math.max(...Object.values(atlasJson as Record<string, number[]>).map(r => r[0] + r[2]));
+/** ชีตโหลดแล้ว และเป็นขนาดที่ตรงกับกรอบใน atlas (ถ้าไม่ตรง ใช้ภาพวาดด้วยโค้ดแทน) */
+const sheetReady = () => sheet.complete && sheet.naturalWidth >= SHEET_W;
 export const whenSheetReady = (fn: () => void) => { if (sheetReady()) fn(); else sheet.addEventListener('load', fn, { once: true }); };
 
 /** ความกว้างในฉาก (พิกเซลเกม) */
