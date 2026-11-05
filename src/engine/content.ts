@@ -19,6 +19,8 @@ export interface Breed {
   scale: number;
   /** ตัวคูณขนาดของชีตท่าเพิ่ม `<art>_x.png` (2×3: กิน · ท่าเฉพาะชนิด) ให้ตัวเท่าชีตหลัก */
   xScale: number;
+  /** ขนาดชีตท่านอน (_s) เทียบกับชีตหลัก */
+  sScale: number;
 }
 
 export const BREEDS = breedsJson as Breed[];

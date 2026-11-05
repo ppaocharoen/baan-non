@@ -16,6 +16,8 @@ const GROUND = 142;
 const LANE_Y = [GROUND + 2, GROUND + 16];
 /** แนวชายคาที่แขวนของ (ความสูงโลก) และความยาวสายแขวน */
 const HANG_Y = 47, CHAIN = 16;
+/** ของเตี้ยแบบถาด/เบาะ ที่ต้องเอียงตามมุมมอง */
+const PERSPECTIVE = new Set(['bed', 'coolmat', 'litter', 'peepad', 'bowl', 'rug']);
 
 /** who: all = ทุกตัว · climber = แมวกับนก · bird = นกเท่านั้น */
 interface Perch { x0: number; x1: number; y: number; label: string; who: 'all' | 'climber' | 'bird'; cage?: number }
@@ -461,11 +463,11 @@ export class Scene {
     }
     for (const { p, a } of pets.filter(x => x.a.perch === 0 || x.a.jump > 0).sort((u, v) => u.a.x - v.a.x)) this.drawPet(p, a, g);
     for (const it of here.filter(i => i.lane === 1 && !flat(i.key))) this.drawHomeItem(it, n);
-    // กรงแขวนที่ชายคา: วาดนกข้างในก่อนแล้ววาดกรงทับ (ซี่กรงอยู่หน้านก)
+    // กรงแขวนที่ชายคา: วาดกรงก่อนแล้ววาดนกทับ (ให้เห็นน้องชัด)
     for (const it of here.filter(i => i.lane === 2)) {
       const idx = perchesHere.findIndex(q => q.cage === it.uid);
-      for (const { p, a } of pets.filter(x => x.a.perch === idx && x.a.jump === 0)) this.drawPet(p, a, g);
       this.drawHomeItem(it, n);
+      for (const { p, a } of pets.filter(x => x.a.perch === idx && x.a.jump === 0)) this.drawPet(p, a, g);
     }
     if (amb) this.ambient.drawFront(c, { camX: this.camX, s, rx: this.rx, n });
     if (this.editMode) {
@@ -478,7 +480,11 @@ export class Scene {
     const f = furnitureOf(it.key), x = it.x! - this.camX, h = itemHeight(it.key), fw = f.w * ITEM_SCALE;
     const y = it.lane === 2 ? HANG_Y + CHAIN + h : LANE_Y[it.lane];
     if (it.lane === 2) { this.ctx.fillStyle = '#5a4630'; this.ctx.fillRect(this.rx(x - 0.3), HANG_Y, this.rx(0.6) || 1 / this.K, CHAIN + 1); }
+    // ของเตี้ยที่ภาพวาดมองจากตรงกลาง: เอียงขอบบนเข้าหาจุดลับตาของฉาก ให้เข้ากับมุมกล้องเมื่อวางชิดซ้าย/ขวา
+    const tilt = PERSPECTIVE.has(it.key) ? clamp(-(this.worldWOf(it.room) / 2 - it.x!) * 0.004, -0.4, 0.4) : 0;
+    if (tilt) { this.ctx.save(); this.ctx.transform(1, 0, tilt, 1, -tilt * y, 0); }
     drawItem(this.ctx, it.key, x, y, this.rx, this.t, it.fill, toiletCap(f), n);
+    if (tilt) this.ctx.restore();
     this.hits.push({ kind: 'item', id: it.uid, x: it.x! - fw / 2, y: y - h, w: fw, h: Math.max(h, 8) });
     if (this.editMode) {
       const c = this.ctx;
@@ -492,7 +498,7 @@ export class Scene {
 
   private drawPet(p: Pet, a: Actor, g: GameState) {
     const br: Breed = breedOf(p.breed), stage = petStage(p, g.day);
-    const main = this.sheet(br.art), extra = this.sheet(`${br.art}_x`);
+    const main = this.sheet(br.art), extra = this.sheet(`${br.art}_x`), sleepy = this.sheet(`${br.art}_s`);
     if (!ready(main)) return;
     const perches = this.perchesOf(p.room);
     let im = main, cols = 4, col = 0, scale = br.scale, lift = 0, row: number = stage;
@@ -518,10 +524,16 @@ export class Scene {
         if (stage < 2) { col = 3; lift = Math.abs(Math.sin(this.t * 9)) * 5; }
         else if (ready(extra)) { im = extra; cols = 2; col = 1; scale = br.scale * br.xScale; }
         break;
-      // ท่านอน: ชีตหลักมีท่าขดนอนแค่แถววัยชรา → ใช้ทุกวัย (ลูกสัตว์ย่อลง) จนกว่าจะมีชีตท่านอน
-      case 'sleep': col = 3; row = 2; if (stage === 0) scale *= 0.72; break;
+      // ท่านอน: ชีต _s (คอลัมน์ 1 = ขดหลับ) · ถ้ายังไม่โหลดใช้ท่าขดจากแถววัยชรา
+      case 'sleep':
+        if (ready(sleepy)) { im = sleepy; cols = 2; col = 0; scale = br.scale * br.sScale; }
+        else { col = 3; row = 2; if (stage === 0) scale *= 0.72; }
+        break;
       case 'squat': col = 0; lift = -0.5; break;
-      default: col = 0;
+      default:
+        col = 0;
+        // ป่วย/ซึมหลังฉีดยา: นอนหมอบตาปรือ (ชีต _s คอลัมน์ 2)
+        if ((isSick(p) || isPostVax(p, g.day)) && ready(sleepy)) { im = sleepy; cols = 2; col = 1; scale = br.scale * br.sScale; }
     }
     const fw = im.naturalWidth / cols, fh = im.naturalHeight / 3;
     const w = fw * scale, h = fh * scale, sx = a.x - this.camX;

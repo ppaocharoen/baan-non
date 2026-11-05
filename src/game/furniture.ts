@@ -26,6 +26,15 @@ function sprite(c: CanvasRenderingContext2D, key: string, x: number, y: number, 
   return true;
 }
 
+/** วาดชิ้นจากชีตตามความกว้างที่กำหนด (ใช้กับอึในถาด) */
+function spriteW(c: CanvasRenderingContext2D, key: string, x: number, y: number, rx: (v: number) => number, w: number): boolean {
+  const a = ATLAS[key];
+  if (!a || !sheetReady()) return false;
+  const h = (a[3] * w) / a[2];
+  c.drawImage(sheet, a[0], a[1], a[2], a[3], rx(x - w / 2), rx(y - h), rx(w), rx(h));
+  return true;
+}
+
 type R = (x: number, y: number, w: number, h: number, c: string) => void;
 
 const P = {
@@ -98,7 +107,14 @@ export function drawItem(c: CanvasRenderingContext2D, key: string, x: number, y:
   }
   // ห้องน้ำ/ถาด: บอกว่าเต็มแค่ไหน
   if (cap > 0 && fill > 0) {
-    for (let i = 0; i < Math.min(fill, 6); i++) r(-7 + i * 3, key === 'cage' ? -2 : -6, 2, 2, P.poop);
+    // อึในถาด/ขี้นกในกรง ใช้ภาพจริง วางกระจายบนผิวทราย (แถวหลังสูงกว่าเล็กน้อย)
+    const tw = worldW(key, S), th = itemHeight(key, S), bird = key === 'cage', n = Math.min(fill, 6);
+    const spots = [[-0.18, 0], [0.16, 1], [0.02, 0], [-0.3, 1], [0.3, 0], [-0.05, 1]];
+    for (let i = 0; i < n; i++) {
+      const [fx, back] = spots[i];
+      const px = x + fx * tw * (bird ? 0.8 : 1), py = bird ? y - th * 0.07 : y - th * (0.32 + back * 0.14);
+      if (!spriteW(c, bird ? 'dropping' : 'poop', px, py, rx, tw * (bird ? 0.17 : 0.2))) r(-7 + i * 3, bird ? -2 : -6, 2, 2, P.poop);
+    }
     if (fill >= cap) { r(-1, -18, 2, 5, '#A32D2D'); r(-1, -12, 2, 2, '#A32D2D'); }
   }
 }
