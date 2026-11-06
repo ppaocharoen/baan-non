@@ -7,9 +7,10 @@ import { offlineDays, onlineDays } from './time';
 import { careOf, diseaseOf, diseaseRisks, HEALTH, newHealth, vaccineOf, vaccineState, careState } from './health';
 import { digest, floorMess, hasToy, HYGIENE, stepHome, useSupply, type HomeItem, type Poop, type PoopEvent } from './home';
 import { newSocial, passiveIncome, type SocialState } from './social';
+import { stepSponsor, type SponsorEvent } from './sponsor';
 import { decayPet, isPostVax, isSick, petAge, petStage, type Grave, type Pet } from './pet';
 
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 export interface GameState {
   v: number;
@@ -41,7 +42,8 @@ export type GameEvent =
   | { type: 'died'; petId: number; cause: 'age' | 'neglect' }
   | { type: 'stage'; petId: number; stage: 0 | 1 | 2 }
   | { type: 'newDay'; day: number }
-  | PoopEvent;
+  | PoopEvent
+  | SponsorEvent;
 
 export interface Result { ok: boolean; reason?: string; }
 const fail = (reason: string): Result => ({ ok: false, reason });
@@ -68,6 +70,8 @@ export function advance(g: GameState, days: number, offline = false): GameEvent[
     if (Math.floor(g.day) > Math.floor(before)) events.push({ type: 'newDay', day: Math.floor(g.day) });
     passiveIncome(g, dt); // รายได้โฆษณาจากโพสต์เก่าบนเพจ
     for (const p of [...g.pets]) stepPet(g, p, dt, needsMult, events);
+    const se = stepSponsor(g);
+    if (se) events.push(se);
   }
   return events;
 }
@@ -154,8 +158,10 @@ const addBond = (p: Pet, v: number) => { p.bond = Math.min(1, Math.max(0, p.bond
 export function feed(g: GameState, id: number, foodKey: string): Result {
   const p = atHome(g, id); if (!isPet(p)) return p;
   const f = foodOf(foodKey);
-  if (g.money < f.price) return fail('เงินไม่พอ');
-  g.money -= f.price;
+  // อาหารฟรีจากสปอนเซอร์ใช้ก่อน
+  const free = `meal_${foodKey}`;
+  if ((g.supplies[free] ?? 0) > 0) g.supplies[free]--;
+  else { if (g.money < f.price) return fail('เงินไม่พอ'); g.money -= f.price; }
   p.full = 1;
   p.starveDays = 0;
   p.lastFoodSick = f.sickMult;

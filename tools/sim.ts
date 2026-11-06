@@ -12,6 +12,7 @@ import { careFor, dueItems, vaccinesFor } from '../src/engine/health';
 import { buyFurniture, buySupply, cleanPoop, emptyToilet, furnitureOf, placeItem } from '../src/engine/home';
 import { breedOf } from '../src/engine/content';
 import { addPhoto, post, postsLeft } from '../src/engine/social';
+import { acceptOffer, declineOffer, photoFits, sponsorDef } from '../src/engine/sponsor';
 import { isSick, type Pet } from '../src/engine/pet';
 import { nextRandom } from '../src/engine/rng';
 import { realHoursOffline } from '../src/engine/time';
@@ -78,10 +79,26 @@ function careSession(g: GameState, now: number, minutes: number, rngHits: { rng:
 /** ผู้เล่นดูแลดีถ่ายรูปตามจังหวะชัตเตอร์ แล้วโพสต์รูปที่ดีที่สุด */
 function socialSession(g: GameState, r: { rng: number }) {
   const n = 2 + Math.floor(nextRandom(r) * 2);
-  const labels = ['นอนหลับ', 'กินข้าว', 'เล่น', 'บนม้านั่ง', 'อาบน้ำ'];
-  for (let i = 0; i < n && g.pets.length; i++) addPhoto(g, { tier: nextRandom(r) < 0.35 ? 1 : 0, label: labels[Math.floor(nextRandom(r) * labels.length)], petIds: [g.pets[0].id] });
+  const labels: [string, string][] = [['นอนหลับ', 'sleep'], ['กินข้าว', 'eat'], ['เล่น', 'play'], ['บนม้านั่ง', 'high'], ['อาบน้ำ', 'bath']];
+  // รับงานสปอนเซอร์ที่ทำได้ (ผู้เล่นจริงจะไม่รับโจทย์ที่รู้ว่าทำไม่ได้ · sim ถ่ายได้แค่ระดับทั่วไป/ดี)
+  const of = g.social.sponsor.offer;
+  if (of && !g.social.sponsor.active) {
+    const d = sponsorDef(of.key);
+    if (['eat', 'play', 'high', 'bath', 'sleep', 'healthy', 'any'].includes(d.quest) && d.minTier <= 1) acceptOffer(g); else declineOffer(g);
+  }
+  // มีงานค้าง: ผู้เล่นตั้งใจสร้างจังหวะตามโจทย์ (ให้อาหาร/เล่น/อาบน้ำ แล้วถ่าย) รอบละ 1 รูป
+  const act = g.social.sponsor.active;
+  if (act && g.pets.length) {
+    const q = sponsorDef(act.key).quest;
+    if (q === 'eat' || q === 'play' || q === 'bath') addPhoto(g, { tier: nextRandom(r) < 0.35 ? 1 : 0, label: 'งาน', kind: q, petIds: [g.pets[0].id] });
+  }
+  for (let i = 0; i < n && g.pets.length; i++) {
+    const [label, kind] = labels[Math.floor(nextRandom(r) * labels.length)];
+    addPhoto(g, { tier: nextRandom(r) < 0.35 ? 1 : 0, label, kind, petIds: [g.pets[0].id] });
+  }
   while (postsLeft(g) > 0) {
-    const best = g.social.album.filter(p => !p.posted).sort((a, b) => b.score - a.score)[0];
+    const open = g.social.album.filter(p => !p.posted);
+    const best = open.find(p => photoFits(g, p)) ?? open.sort((a, b) => b.score - a.score)[0];
     if (!best) break;
     post(g, best.id);
   }
@@ -209,6 +226,7 @@ function socialSession(g: GameState, r: { rng: number }) {
   const SESSIONS: [number, number][] = [[8, 15], [12.5, 10], [20, 30]];
   const fans15: number[] = [], fans30: number[] = [], fans60: number[] = [], money: number[] = [];
   let broke = 0, runs = 0;
+  const spShare: number[] = [], spDone: number[] = [], spFail: number[] = [];
   for (let seed = 1; seed <= 30; seed++) for (const br of BREEDS) {
     const { g } = fresh('normal', seed * 31 + 7, br.key);
     g.money = B.startMoney - (g.items.length ? 0 : 0); // เงินจริง (ห้องน้ำซื้อไปแล้วใน fresh ด้วยเงินไม่จำกัด)
@@ -225,6 +243,8 @@ function socialSession(g: GameState, r: { rng: number }) {
       if (d === 29) fans30.push(g.social.followers);
     }
     fans60.push(g.social.followers); money.push(g.money);
+    const sp = g.social.sponsor;
+    spShare.push(sp.earned / Math.max(1, g.social.earned)); spDone.push(sp.rep); spFail.push(sp.failed);
     if (minMoney < 0) broke++;
     runs++;
   }
@@ -232,6 +252,9 @@ function socialSession(g: GameState, r: { rng: number }) {
   const g1 = avg(fans15), g2 = avg(fans30) - avg(fans15), g3 = avg(fans60) - avg(fans30);
   goal('4. ผู้ติดตามไม่โตทวีคูณ', g3 / 30 < (g2 / 15) * 1.2 && g2 / 15 < g1 / 15 * 1.6,
     `เฉลี่ยวันละ +${(g1 / 15).toFixed(0)} (วัน 1–15) · +${(g2 / 15).toFixed(0)} (16–30) · +${(g3 / 30).toFixed(0)} (31–60) · ครบ 60 วัน ${avg(fans60).toFixed(0)} คน`);
+  const share = avg(spShare);
+  goal('6. สปอนเซอร์เป็นรายได้เสริม ไม่ใช่รายได้หลัก (10–45% ของรายได้เพจ)', share > 0.1 && share < 0.45,
+    `สัดส่วน ${(share * 100).toFixed(0)}% · ทำสำเร็จเฉลี่ย ${avg(spDone).toFixed(1)} งาน · ไม่ทัน ${avg(spFail).toFixed(1)} งาน ใน 60 วัน`);
   goal('5. ผู้เล่นดูแลดีมีเงินพอ (ไม่ติดลบ)', broke === 0, `${runs} รอบ ติดลบ ${broke} · เงินเฉลี่ยตอนจบ ${avg(money).toFixed(0)}`);
 }
 

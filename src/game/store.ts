@@ -2,6 +2,7 @@
 import { SAVE_VERSION, type GameState } from '../engine/core';
 import { newHealth } from '../engine/health';
 import { newSocial } from '../engine/social';
+import { newSponsor } from '../engine/sponsor';
 
 const SAVE_KEY = 'baan-non-save';
 const SETTINGS_KEY = 'baan-non-settings';
@@ -51,6 +52,12 @@ export function migrate(g: any): GameState | null {
   if (g.v === 5) { // v5 → v6: นาฬิกาดูแลสุขภาพ (ค่าเดิมเก็บเป็นวันในเกม → ตั้งนาฬิกาเท่าวันปัจจุบัน)
     for (const p of g.pets ?? []) p.careClock ??= g.day;
     g.v = 6;
+  }
+  if (g.v === 6) { // v6 → v7: สปอนเซอร์เพจ · ป้ายรูป
+    g.social ??= newSocial();
+    g.social.sponsor ??= newSponsor();
+    for (const ph of g.social.album ?? []) ph.tags ??= [];
+    g.v = 7;
   }
   return g as GameState;
 }

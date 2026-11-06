@@ -13,6 +13,7 @@ import { Scene } from './scene';
 import { allPhotos, clearGame, loadGame, loadSettings, migrate, photoUrl, replacePhotos, saveGame, savePhoto, saveSettings, type Settings } from './store';
 import { makeBackupFile, makeSaveCode, readBackupFile, readSaveCode } from './transfer';
 import { addPhoto, freshness, hourFactor, post, postsLeft, SOCIAL, TIER_TH } from '../engine/social';
+import { acceptOffer, declineOffer, giftText, photoFits, QUEST_TH, sponsorDef, type Deal } from '../engine/sponsor';
 import { applyTheme, THEMES } from './themes';
 import { runTraining } from './train';
 import { petPitch, sfx } from './sound';
@@ -150,19 +151,19 @@ function doPlay(id: number) {
   const r = play(g, id);
   if (!r.ok) { toast(r.reason!); const p = petById(g, id); if (p) voice(p); return; }
   scene.react(id, 'happy'); floatAt(id, '♥');
-  if (Math.random() < 0.35) offerMoment('ดีใจ', 0, [id], 600);
+  if (Math.random() < (questIs('play') ? 1 : 0.35)) offerMoment('ดีใจ', 0, [id], 600, 'play');
   const p = petById(g, id); if (p) voice(p, 'happy');
 }
 function doFeed() {
   const p = need(); if (!p || !g) return;
-  const s = openPop(`${head(`ให้อาหาร ${p.name}`)}${FOODS.map(f => `<button class="opt" data-f="${f.key}" ${g!.money < f.price ? 'disabled' : ''}><span>${f.name}</span><span>${f.price}${COIN}</span></button>`).join('')}`);
+  const s = openPop(`${head(`ให้อาหาร ${p.name}`)}${FOODS.map(f => { const free = g!.supplies[`meal_${f.key}`] ?? 0; return `<button class="opt" data-f="${f.key}" ${!free && g!.money < f.price ? 'disabled' : ''}><span>${f.name}</span><span>${free ? `ฟรี (เหลือ ${free} มื้อ)` : `${f.price}${COIN}`}</span></button>`; }).join('')}`);
   s.querySelectorAll<HTMLElement>('[data-f]').forEach(el => el.addEventListener('click', () => {
     const r = feed(g!, p.id, el.dataset.f!);
     closePop();
     if (!r.ok) { toast(r.reason!); return; }
     scene.react(p.id, 'eat', el.dataset.f!); floatAt(p.id, '😋');
     sfx.munch(); voice(p, 'happy', 900);
-    offerMoment('กินข้าว', 1, [p.id], 1500);
+    offerMoment('กินข้าว', 1, [p.id], 1500, 'eat');
   }));
 }
 let batheWarnUntil = 0;
@@ -177,7 +178,7 @@ function doBathe() {
   sfx.bubbles();
   if (r.shampoo) toast(`ใช้แชมพู ${p.name} หอมสะอาดนานขึ้น`, 2000);
   if (r.fever) { toast(`${p.name} ตัวรุมๆ เป็นไข้หลังฉีดวัคซีน พาไปคลินิกนะ`, 4500); voice(p, 'sad', 900); }
-  else { voice(p, 'happy', 700); offerMoment('ขนฟูหลังอาบน้ำ', 0, [p.id], 900); }
+  else { voice(p, 'happy', 700); offerMoment('ขนฟูหลังอาบน้ำ', 0, [p.id], 900, 'bath'); }
 }
 function doTrain() {
   const p = need(); if (!p || !g) return;
@@ -188,7 +189,7 @@ function doTrain() {
     const before = p.trained;
     const r = train(g!, p.id, hits); closePop();
     toast(hits ? `${p.name} เก่งขึ้น +${Math.round((p.trained - before) * 100)}%${r.treat ? ' (ใช้ขนมฝึก)' : ''}` : 'รอบนี้พลาดหมด ไว้ลองใหม่สัปดาห์หน้า');
-    if (hits) { scene.react(p.id, 'happy'); floatAt(p.id, '★'); voice(p, 'happy'); if (hits >= 4) offerMoment('ฝึกท่าใหม่สำเร็จ', 1, [p.id], 500); }
+    if (hits) { scene.react(p.id, 'happy'); floatAt(p.id, '★'); voice(p, 'happy'); if (hits >= 4) offerMoment('ฝึกท่าใหม่สำเร็จ', 1, [p.id], 500, 'play'); else if (hits && questIs('play')) offerMoment('ตั้งใจฝึก', 0, [p.id], 500, 'play'); }
   });
 }
 function stateText(st: ItemState, series = 1): string {
@@ -481,14 +482,15 @@ function useItem(uid: number) {
 
 // ---------- จังหวะชัตเตอร์ · อัลบั้ม · เพจ ----------
 const fmtFans = (n: number) => (n >= 10000 ? `${(n / 1000).toFixed(0)}k` : n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(Math.floor(n)));
-let moment: { label: string; tier: number; petIds: number[]; until: number } | null = null;
+let moment: { label: string; tier: number; petIds: number[]; until: number; kind: string } | null = null;
 let momentCooldown = 0;
 const cam = $('cam');
 /** เสนอจังหวะชัตเตอร์: ไอคอนกล้องเด้งที่มุมจอ 6 วินาที แตะทันได้รูป */
-function offerMoment(label: string, tier: number, petIds: number[], delayMs = 0) {
+/** kind = ชนิดจังหวะ (eat play bath high sleep two special) ใช้เป็นป้ายรูปสำหรับโจทย์สปอนเซอร์ */
+function offerMoment(label: string, tier: number, petIds: number[], delayMs = 0, kind = '') {
   setTimeout(() => {
     if (!g || moment || performance.now() < momentCooldown || pop.classList.contains('on') || scene.editMode) return;
-    moment = { label, tier, petIds, until: performance.now() + 6000 };
+    moment = { label, tier, petIds, until: performance.now() + 6000, kind };
     cam.classList.add('on');
   }, delayMs);
 }
@@ -501,7 +503,7 @@ cam.addEventListener('click', () => {
   savePhoto(ph.id, url, g.social.album.map(p => p.id));
   const fl = document.createElement('div'); fl.className = 'flash'; $('scr').appendChild(fl); setTimeout(() => fl.remove(), 500);
   sfx.shutter();
-  toast(`📸 ${m.label} · เก็บเข้าอัลบั้มแล้ว (${TIER_TH[m.tier]})`, 2200);
+  toast(`📸 ${m.label} · เก็บเข้าอัลบั้มแล้ว (${TIER_TH[m.tier]})${photoFits(g, ph) ? ' · ตรงโจทย์สปอนเซอร์' : ''}`, 2400);
   saveGame(g);
 });
 let watchT = 15;
@@ -516,10 +518,10 @@ function momentWatch(dt: number) {
   const high = seen.find(x => x.s!.perch > 0 && x.s!.perchSpecial && !x.s!.jumping);
   const mid = seen.find(x => x.s!.perch > 0 && !x.s!.perchSpecial && !x.s!.jumping);
   const sleep = seen.find(x => x.s!.action === 'sleep');
-  if (seen.length >= 2 && Math.abs(seen[0].s!.x - seen[1].s!.x) < 18) offerMoment('สองตัวอยู่ด้วยกัน', 1, [seen[0].p.id, seen[1].p.id]);
-  else if (high) offerMoment(high.s!.perchLabel, 1, [high.p.id]);
-  else if (mid) offerMoment(mid.s!.perchLabel, 0, [mid.p.id]);
-  else if (sleep) offerMoment(nightness(g.day) > 0.5 ? 'นอนหลับฝันดี' : 'งีบกลางวัน', 0, [sleep.p.id]);
+  if (seen.length >= 2 && Math.abs(seen[0].s!.x - seen[1].s!.x) < 18) offerMoment('สองตัวอยู่ด้วยกัน', 1, [seen[0].p.id, seen[1].p.id], 0, 'two');
+  else if (high) offerMoment(high.s!.perchLabel, 1, [high.p.id], 0, 'high');
+  else if (mid) offerMoment(mid.s!.perchLabel, 0, [mid.p.id], 0, 'high');
+  else if (sleep) offerMoment(nightness(g.day) > 0.5 ? 'นอนหลับฝันดี' : 'งีบกลางวัน', 0, [sleep.p.id], 0, 'sleep');
 }
 
 function page() {
@@ -528,17 +530,46 @@ function page() {
   const s = openPop(`${head('เพจบ้านน้อน')}
     <div class="stats"><div><b>${fmtFans(s0.followers)}</b><small>ผู้ติดตาม</small></div><div><b>${fmtMoney(s0.earned)}${COIN}</b><small>รายได้รวม</small></div><div><b>${left}/${SOCIAL.postsPerDay}</b><small>โพสต์ได้วันนี้</small></div></div>
     <p><small>${hf > 1 ? '✦ ตอนนี้หัวค่ำ คนดูเยอะ' : hf < 0.9 ? 'ตอนนี้ดึกแล้ว คนดูน้อย · โพสต์หัวค่ำดีกว่า' : 'โพสต์ช่วงหัวค่ำ (18–22 น.) คนดูเยอะกว่า'} · รูปเก่าคนสนใจน้อยลง</small></p>
+    ${sponsorCard()}
     <p class="sec">อัลบั้ม (${s0.album.length}/${SOCIAL.albumMax})</p>
-    ${s0.album.length ? `<div class="album">${[...s0.album].reverse().map(p => `<button data-ph="${p.id}"><img src="${photoUrl(p.id)}" alt="${p.label}" /><span class="tag">${TIER_TH[p.tier]}</span>${p.posted ? '<span class="done">โพสต์แล้ว</span>' : ''}</button>`).join('')}</div>`
+    ${s0.album.length ? `<div class="album">${[...s0.album].reverse().map(p => `<button data-ph="${p.id}"><img src="${photoUrl(p.id)}" alt="${p.label}" /><span class="tag">${TIER_TH[p.tier]}</span>${p.posted ? '<span class="done">โพสต์แล้ว</span>' : photoFits(g!, p) ? '<span class="fit">ตรงโจทย์</span>' : ''}</button>`).join('')}</div>`
       : '<p>ยังไม่มีรูป · เมื่อน้องทำอะไรน่ารัก ไอคอนกล้องจะเด้งที่มุมจอ แตะให้ทันเพื่อถ่ายรูป</p>'}`, true);
   s.querySelectorAll<HTMLElement>('[data-ph]').forEach(el => el.addEventListener('click', () => photoDetail(Number(el.dataset.ph))));
+  s.querySelector('#sp-yes')?.addEventListener('click', () => {
+    const r = acceptOffer(g!);
+    if (!r.ok) { toast(r.reason!); return; }
+    sfx.buy(); toast(`รับงานแล้ว ได้มัดจำ${r.gift ? ` + ${r.gift}` : ''}`, 3000); saveGame(g!); page();
+  });
+  s.querySelector('#sp-no')?.addEventListener('click', () => { declineOffer(g!); saveGame(g!); page(); });
+}
+
+/** เวลาจริง (ms) → ข้อความเวลาที่เหลือ */
+const leftText = (at: number) => { const h = (at - Date.now()) / 3600_000; return h >= 1 ? ` ${Math.ceil(h)} ชม.` : ` ${Math.max(1, Math.ceil(h * 60))} นาที`; };
+const questIs = (q: string) => !!g?.social.sponsor.active && sponsorDef(g.social.sponsor.active.key).quest === q;
+function dealHtml(d: Deal, active: boolean) {
+  const def = sponsorDef(d.key), gift = giftText(def);
+  const req = `${QUEST_TH[def.quest]} ${def.need} รูป${def.minTier ? ` · ระดับ${TIER_TH[def.minTier]}ขึ้นไป` : ''}`;
+  return `<div class="sponsor" style="--brand:${def.color}">
+    <div class="sp-head"><b>${def.brand}</b><small>${active ? `ส่งงานภายใน${leftText(d.deadlineAt!)}` : `ตอบภายใน${leftText(d.expiresAt)}`}</small></div>
+    <p>${def.pitch}</p>
+    <p><small>โจทย์: ${req}${active ? ` · ส่งแล้ว ${d.done}/${def.need}` : ''}</small></p>
+    ${active ? `<div class="sp-bar"><i style="width:${(d.done / def.need) * 100}%"></i></div>` : ''}
+    <p><small>ค่าตอบแทน ${d.pay}${COIN} (${active ? `ได้มัดจำแล้ว ${d.upfront}` : `มัดจำ ${d.upfront}`})${gift ? ` + ${gift}` : ''}</small></p>
+    ${active ? '' : `<div class="btnrow"><button class="cta" id="sp-yes">รับงาน</button><button class="cta ghost" id="sp-no">ไม่รับ</button></div>`}
+  </div>`;
+}
+function sponsorCard() {
+  const sp = g!.social.sponsor;
+  if (sp.active) return `<p class="sec">งานสปอนเซอร์</p>${dealHtml(sp.active, true)}`;
+  if (sp.offer) return `<p class="sec">ข้อเสนอใหม่</p>${dealHtml(sp.offer, false)}`;
+  return g!.social.followers < 300 ? '<p><small>ผู้ติดตามครบ 300 จะเริ่มมีแบรนด์ติดต่อมา</small></p>' : '';
 }
 function photoDetail(id: number) {
   if (!g) return;
   const ph = g.social.album.find(p => p.id === id); if (!ph) return;
   const fresh = Math.round(freshness(ph, g.day) * 100), left = postsLeft(g);
   const s = openPop(`${head(ph.label)}<img class="photo-big" src="${photoUrl(id)}" alt="" />
-    <p><small>ระดับ ${TIER_TH[ph.tier]} · ความสด ${fresh}%${ph.sick ? ' · น้องดูไม่สบาย คนจะเป็นห่วง' : ''}</small></p>
+    <p><small>ระดับ ${TIER_TH[ph.tier]} · ความสด ${fresh}%${ph.sick ? ' · น้องดูไม่สบาย คนจะเป็นห่วง' : ''}${photoFits(g, ph) ? ` · <b>ตรงโจทย์ ${sponsorDef(g.social.sponsor.active!.key).brand}</b>` : ''}</small></p>
     <div class="btnrow">${ph.posted ? '<button class="cta" disabled>โพสต์แล้ว</button>' : `<button class="cta" id="post" ${left <= 0 ? 'disabled' : ''}>${left > 0 ? 'โพสต์ลงเพจ' : 'วันนี้โพสต์ครบแล้ว'}</button>`}
     <a class="cta ghost" id="dl" download="baan-non-${id}.jpg" href="${photoUrl(id)}" style="text-align:center;text-decoration:none">บันทึกรูป</a></div>
     <button class="cta ghost" id="back">กลับไปอัลบั้ม</button>`, true);
@@ -550,6 +581,7 @@ function photoDetail(id: number) {
     sfx.buy();
     const out = openPop(`${head('โพสต์แล้ว!')}<img class="photo-big" src="${photoUrl(id)}" alt="" />
       <div class="stats"><div><b>${res.views.toLocaleString('th-TH')}</b><small>ยอดวิว</small></div><div><b>${res.fans >= 0 ? '+' : ''}${res.fans}</b><small>ผู้ติดตาม</small></div><div><b>+${res.coins}${COIN}</b><small>รายได้</small></div></div>
+      ${res.sponsor ? `<div class="comment sp-done">${res.sponsor.finished ? `ส่งงาน ${res.sponsor.brand} ครบแล้ว! ได้ค่าตอบแทนอีก +${res.sponsor.paid}${COIN}` : `ส่งงาน ${res.sponsor.brand} แล้ว ${res.sponsor.done}/${res.sponsor.need}`}${res.sponsor.spam ? '<br><small>โพสต์สปอนเซอร์ถี่ไป คนดูน้อยลง</small>' : ''}</div>` : ''}
       ${res.comments.map(c => `<div class="comment">💬 ${c}</div>`).join('')}
       <button class="cta" id="ok">เยี่ยม</button>`, true);
     out.querySelector('#ok')!.addEventListener('click', page);
@@ -562,6 +594,8 @@ function handle(events: GameEvent[]) {
   for (const e of events) {
     if (e.type === 'newDay') continue;
     if (e.type === 'poop') { scene.goPoop(e.petId, e.x, e.room); setTimeout(() => sfx.plop(), 900); continue; }
+    if (e.type === 'sponsorOffer') { toast(`${sponsorDef(e.key).brand} ติดต่อมา · ดูข้อเสนอในเพจ`, 4000); sfx.jingle(); continue; }
+    if (e.type === 'sponsorFail') { toast(`ส่งงาน ${sponsorDef(e.key).brand} ไม่ทัน · เสียผู้ติดตาม ${e.lost}`, 4500); sfx.alert(); continue; }
     const name = nameOf(e.petId);
     const pet = g ? petById(g, e.petId) : undefined;
     if (e.type === 'sick') { toast(`${name} ไม่สบาย (${diseaseOf(e.disease).symptom}) พาไปคลินิกนะ`, 4500); sfx.alert(); if (pet) voice(pet, 'sad', 350); }
@@ -590,6 +624,9 @@ function renderHud() {
   $('time').textContent = `ฤดู${SEASONS[c.season]} วัน ${c.dayOfSeason} · ${hh}:${String(mm).padStart(2, '0')}`;
   $('money').textContent = fmtMoney(g.money);
   $('fans').textContent = fmtFans(g.social.followers);
+  const job = g.social.sponsor.active, jobEl = $('job');
+  jobEl.hidden = !job;
+  if (job) jobEl.textContent = `งาน ${job.done}/${sponsorDef(job.key).need}`;
   const p = sel();
   $('hud').hidden = !p;
   if (p) {
@@ -604,7 +641,7 @@ function renderHud() {
   const dots: Record<string, boolean> = {
     feed: home.some(x => x.full < 0.35), bathe: home.some(x => x.clean < 0.3), train: home.some(x => canTrain(g!, x)),
     clinic: home.some(x => isSick(x) || (() => { const d = dueItems(x, g!.day); return d.vax.length + d.care.length > 0; })()),
-    page: g.social.album.some(p => !p.posted) && postsLeft(g) > 0,
+    page: (g.social.album.some(p => !p.posted) && postsLeft(g) > 0) || !!g.social.sponsor.offer,
     shop: false, decor: g.items.some(i => { const f = furnitureOf(i.key); return i.x !== null && toiletCap(f) > 0 && i.fill >= toiletCap(f); }), menu: false,
   };
   document.querySelectorAll<HTMLElement>('#btns [data-act]').forEach(el => el.querySelector('.dot')!.classList.toggle('on', dots[el.dataset.act!]));

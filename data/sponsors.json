@@ -1,0 +1,37 @@
+[
+  { "key": "padaeng", "brand": "ร้านอาหารสัตว์ป้าแดง", "color": "#c0392b", "tier": 0, "quest": "eat", "need": 1, "minTier": 0, "hours": 24,
+    "gift": { "meal": "premium", "n": 3 }, "pitch": "ป้าฝากอาหารพรีเมียมมาให้น้องลอง 3 มื้อจ้ะ ขอรูปน้องตอนกินสักรูปนะ" },
+  { "key": "lungmoo", "brand": "ร้านของเล่นลุงหมู", "color": "#e67e22", "tier": 0, "species": ["dog", "cat"], "quest": "play", "need": 1, "minTier": 0, "hours": 24,
+    "gift": { "item": "ball" }, "pitch": "ลุงฝากลูกบอลมาให้ ขอรูปน้องตอนเล่นหรือฝึกสักรูปนะ" },
+  { "key": "baanthung", "brand": "ทรายแมวบ้านทุ่ง", "color": "#a1887f", "tier": 0, "species": ["cat"], "quest": "clean", "need": 1, "minTier": 0, "hours": 24,
+    "gift": { "supply": "sand", "n": 6 }, "pitch": "ส่งทรายแมวมาให้ลองค่ะ ขอรูปน้องตอนบ้านสะอาด ไม่มีอึบนพื้นและกระบะทรายว่าง" },
+  { "key": "dijang", "brand": "แผ่นรองซับดีจัง", "color": "#5dade2", "tier": 0, "species": ["dog"], "quest": "clean", "need": 1, "minTier": 0, "hours": 24,
+    "gift": { "supply": "pad", "n": 6 }, "pitch": "ส่งแผ่นรองซับมาให้ลองครับ ขอรูปน้องตอนบ้านสะอาด ไม่มีอึบนพื้นและแผ่นรองว่าง" },
+  { "key": "kaonok", "brand": "ร้านข้าวนกตาโต", "color": "#f1c40f", "tier": 0, "species": ["bird"], "quest": "high", "need": 1, "minTier": 0, "hours": 24,
+    "gift": { "meal": "premium", "n": 3 }, "pitch": "ส่งอาหารนกสูตรพิเศษมา 3 มื้อ ขอรูปน้องเกาะที่สูงสักรูปนะ" },
+
+  { "key": "homklong", "brand": "อาหารน้องหอมคลองสาน", "color": "#27ae60", "tier": 1, "quest": "eat", "need": 2, "minTier": 1, "hours": 36,
+    "gift": { "meal": "premium", "n": 5 }, "pitch": "แบรนด์อาหารสัตว์ริมคลองอยากร่วมงานกับเพจ ขอรูปน้องกินข้าว 2 รูป ระดับดีขึ้นไป" },
+  { "key": "fongfu", "brand": "แชมพูฟองฟู", "color": "#ec87c0", "tier": 1, "species": ["dog", "cat"], "quest": "bath", "need": 2, "minTier": 0, "hours": 36,
+    "gift": { "supply": "shampoo", "n": 6 }, "pitch": "ส่งแชมพูมาให้ 2 ขวด ขอรูปน้องขนฟูหลังอาบน้ำ 2 รูป" },
+  { "key": "pakbung", "brand": "ขนมฝึกปากบุ้ง", "color": "#16a085", "tier": 1, "species": ["dog", "cat"], "quest": "play", "need": 2, "minTier": 1, "hours": 36,
+    "gift": { "supply": "treat", "n": 10 }, "pitch": "ส่งขนมฝึกมาให้ ขอรูปน้องเล่นหรือฝึก 2 รูป ระดับดีขึ้นไป" },
+  { "key": "nokkhamin", "brand": "อาหารนกขมิ้นทอง", "color": "#d4ac0d", "tier": 1, "species": ["bird"], "quest": "high", "need": 2, "minTier": 0, "hours": 36,
+    "gift": { "meal": "premium", "n": 5 }, "pitch": "ขอรูปน้องเกาะที่สูง 2 รูป แลกกับอาหารนกพรีเมียม 5 มื้อ" },
+
+  { "key": "lungpiak_cat", "brand": "ไม้สักลุงเปี๊ยก", "color": "#8e5a2b", "tier": 2, "species": ["cat"], "quest": "high", "need": 2, "minTier": 1, "hours": 48,
+    "gift": { "item": "condo" }, "pitch": "ลุงต่อคอนโดแมวไม้สักมาให้หลังหนึ่ง ขอรูปน้องบนที่สูง 2 รูป ระดับดีขึ้นไป" },
+  { "key": "lungpiak_bird", "brand": "ไม้สักลุงเปี๊ยก", "color": "#8e5a2b", "tier": 2, "species": ["bird"], "quest": "high", "need": 2, "minTier": 1, "hours": 48,
+    "gift": { "item": "cage" }, "pitch": "ลุงทำกรงนกมาให้ใบหนึ่ง ขอรูปน้องบนที่สูง 2 รูป ระดับดีขึ้นไป" },
+  { "key": "lungpiak_dog", "brand": "ไม้สักลุงเปี๊ยก", "color": "#8e5a2b", "tier": 2, "species": ["dog"], "quest": "sleep", "need": 2, "minTier": 0, "hours": 48,
+    "gift": { "item": "bed" }, "pitch": "ลุงทำเบาะนอนมาให้ ขอรูปน้องนอนหลับ 2 รูป" },
+  { "key": "mojaidee", "brand": "คลินิกหมอใจดี", "color": "#2e86c1", "tier": 2, "quest": "healthy", "need": 2, "minTier": 1, "hours": 48,
+    "pitch": "คลินิกอยากชวนรณรงค์ฉีดวัคซีน ขอรูปน้องระดับดีขึ้นไป 2 รูป ตอนน้องทุกตัวแข็งแรงและไม่มีวัคซีนหรือยาค้าง" },
+
+  { "key": "siampet", "brand": "สยามเพ็ทแคร์", "color": "#8e44ad", "tier": 3, "quest": "two", "minPets": 2, "need": 1, "minTier": 1, "hours": 72,
+    "gift": { "meal": "premium", "n": 8 }, "pitch": "แบรนด์ใหญ่ระดับประเทศอยากได้รูปน้องสองตัวอยู่ด้วยกัน 1 รูป" },
+  { "key": "klongtv", "brand": "รายการทีวี ริมคลองเล่าเรื่อง", "color": "#c0392b", "tier": 3, "quest": "any", "need": 1, "minTier": 2, "hours": 72,
+    "pitch": "รายการทีวีอยากเอารูปน้องไปออกอากาศ ขอรูประดับเด่นขึ้นไป 1 รูป" },
+  { "key": "siampet_eat", "brand": "สยามเพ็ทแคร์", "color": "#8e44ad", "tier": 3, "quest": "eat", "need": 3, "minTier": 1, "hours": 72,
+    "gift": { "meal": "premium", "n": 8 }, "pitch": "แคมเปญอาหารสูตรใหม่ ขอรูปน้องกินข้าว 3 รูป ระดับดีขึ้นไป" }
+]

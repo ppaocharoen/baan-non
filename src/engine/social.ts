@@ -4,6 +4,7 @@ import type { GameState, Result } from './core';
 import { placed, furnitureOf } from './home';
 import { isSick, mood } from './pet';
 import { nextRandom } from './rng';
+import { newSponsor, onSponsoredPost, photoFits, photoTags, type SponsorState } from './sponsor';
 
 export interface Photo {
   id: number;
@@ -16,16 +17,19 @@ export interface Photo {
   score: number;
   sick: boolean;
   posted: boolean;
+  /** ป้ายรูป (ชนิดจังหวะ + สภาพบ้าน) ใช้ตรวจโจทย์สปอนเซอร์ */
+  tags: string[];
 }
-export interface PostResult { views: number; fans: number; coins: number; comments: string[]; }
+export interface PostResult { views: number; fans: number; coins: number; comments: string[]; sponsor?: { brand: string; done: number; need: number; finished: boolean; paid: number; spam: boolean } }
 export interface SocialState {
   followers: number;
   album: Photo[];
   postDay: number; postsToday: number;
   earned: number;
   recentLabels: string[];
+  sponsor: SponsorState;
 }
-export const newSocial = (): SocialState => ({ followers: 0, album: [], postDay: -1, postsToday: 0, earned: 0, recentLabels: [] });
+export const newSocial = (): SocialState => ({ followers: 0, album: [], postDay: -1, postsToday: 0, earned: 0, recentLabels: [], sponsor: newSponsor() });
 
 export const SOCIAL = {
   albumMax: 12,
@@ -47,13 +51,14 @@ export const SOCIAL = {
 export const TIER_TH = ['ทั่วไป', 'ดี', 'เด่น', 'ไวรัล'];
 
 /** เก็บรูปเข้าอัลบั้ม — คืนรูปใหม่ (อัลบั้มเต็มจะทิ้งรูปเก่าที่สุดที่ยังไม่โพสต์ก่อน) */
-export function addPhoto(g: GameState, o: { tier: number; label: string; petIds: number[] }): Photo {
+export function addPhoto(g: GameState, o: { tier: number; label: string; petIds: number[]; kind?: string }): Photo {
   const pets = g.pets.filter(p => o.petIds.includes(p.id));
   const m = pets.length ? pets.reduce((a, p) => a + mood(p), 0) / pets.length : 0.5;
   const decor = Math.min(0.3, placed(g).filter(i => furnitureOf(i.key).kind === 'decor').length * 0.06);
   const photo: Photo = {
     id: g.nextUid++, day: g.day, tier: o.tier, label: o.label, petIds: o.petIds,
     score: SOCIAL.tierBase[o.tier] * (0.5 + m) * (1 + decor), sick: pets.some(isSick), posted: false,
+    tags: photoTags(g, o.kind ?? '', o.petIds),
   };
   const s = g.social;
   s.album.push(photo);
@@ -82,6 +87,7 @@ export const freshness = (p: Photo, day: number) => Math.max(0.3, 1 - (day - p.d
 const GOOD = ['น้องน่ารักมากกก 😍', 'ขอพิกัดอาหารค่ะ', 'ใจละลายเลย', 'ตัวจริงน่ารักกว่าในรูปแน่ๆ', 'กดติดตามแล้วนะ', 'อยากไปเล่นด้วยจัง', 'บ้านริมคลองน่าอยู่มาก', 'มุมนี้ดีมากค่ะ'];
 const OK_ = ['น่ารักดีค่ะ', 'ชอบๆ', 'น้องชื่ออะไรคะ', 'โพสต์บ่อยๆ นะ'];
 const SICK = ['น้องดูไม่สบายนะ พาไปหาหมอด่วน', 'ห่วงน้องจัง', 'ดูแลน้องดีๆ นะคะ'];
+const SPONSORED = ['#ได้รับการสนับสนุน แต่น้องน่ารักจริง', 'ของน่าใช้ค่ะ ขอพิกัด', 'น้องเป็นพรีเซนเตอร์ได้เลย'];
 const REPEAT = ['รูปแบบนี้อีกแล้วเหรอ', 'อยากเห็นมุมใหม่ๆ บ้าง'];
 
 export function post(g: GameState, photoId: number): Result & { r?: PostResult } {
@@ -93,7 +99,8 @@ export function post(g: GameState, photoId: number): Result & { r?: PostResult }
   if (s.postDay !== d) { s.postDay = d; s.postsToday = 0; }
   const repeat = s.recentLabels.includes(ph.label);
   const luck = 0.8 + nextRandom(g) * 0.4;
-  const mult = ph.score * freshness(ph, g.day) * hourFactor(g.day) * (repeat ? 0.7 : 1) * (ph.sick ? 0.4 : 1) * luck;
+  const sp = photoFits(g, ph) ? onSponsoredPost(g) : null;
+  const mult = (sp?.viewMult ?? 1) * ph.score * freshness(ph, g.day) * hourFactor(g.day) * (repeat ? 0.7 : 1) * (ph.sick ? 0.4 : 1) * luck;
   const views = Math.round((SOCIAL.baseViews + SOCIAL.viewsPerRootFan * Math.sqrt(s.followers)) * mult);
   const k = SOCIAL.fanSoftCap / (SOCIAL.fanSoftCap + s.followers);
   let fans = Math.round(views * SOCIAL.fanRate * k * k);
@@ -105,7 +112,8 @@ export function post(g: GameState, photoId: number): Result & { r?: PostResult }
   s.recentLabels = [...s.recentLabels, ph.label].slice(-3);
   const pick = (a: string[]) => a[Math.floor(nextRandom(g) * a.length)];
   const comments = ph.sick ? [pick(SICK), pick(SICK)] : repeat ? [pick(REPEAT), pick(OK_)] : mult > 1.5 ? [pick(GOOD), pick(GOOD)] : [pick(GOOD), pick(OK_)];
-  return { ok: true, r: { views, fans, coins, comments: [...new Set(comments)] } };
+  if (sp) comments.unshift(sp.spam ? 'ช่วงนี้ขายของเยอะจัง' : pick(SPONSORED));
+  return { ok: true, r: { views, fans, coins, comments: [...new Set(comments)], sponsor: sp ? { brand: sp.brand, done: sp.done, need: sp.need, finished: sp.finished, paid: sp.paid, spam: sp.spam } : undefined } };
 }
 
 /** รายได้โฆษณาจากโพสต์เก่า (เรียกทุกก้าวเวลา) */

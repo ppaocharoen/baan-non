@@ -4,6 +4,8 @@ import { BREEDS, breedOf, FOODS } from '../src/engine/content';
 import { adopt, advance, bathe, canTrain, catchUpOffline, coax, feed, newGame, play, routineCare, tickOnline, train, treat, vaccinate, type GameState } from '../src/engine/core';
 import { buyFurniture, buySupply, cleanPoop, emptyToilet, placeItem, toiletFor } from '../src/engine/home';
 import { addPhoto, post, postsLeft, SOCIAL } from '../src/engine/social';
+import { acceptOffer, photoFits, SPONSOR, sponsorDef, stepSponsor } from '../src/engine/sponsor';
+import { migrate } from '../src/game/store';
 import { diseaseOf, dueItems, HEALTH, vaccineState, vaccineOf, vaccinesFor } from '../src/engine/health';
 import { petStage } from '../src/engine/pet';
 import { nextRandom } from '../src/engine/rng';
@@ -223,6 +225,51 @@ function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew', protect =
   g.social.followers = 1000; p.health.disease = 'skin';
   const sickPh = addPhoto(g, { tier: 1, label: 'ป่วย', petIds: [id] });
   check('รูปน้องป่วย ผู้ติดตามลด', sickPh.sick && post(g, sickPh.id).r!.fans < 0 && g.social.followers < 1000);
+}
+
+// ---- สปอนเซอร์ ----
+{
+  const H = 3600_000;
+  const { g, id } = setup('normal', 'bangkaew', true);
+  g.lastReal = 1000;
+  g.social.followers = 200;
+  check('ผู้ติดตามไม่ถึง 300 ไม่มีข้อเสนอ', stepSponsor(g) === null && !g.social.sponsor.offer);
+  g.social.followers = 500;
+  const ev = stepSponsor(g);
+  const of = g.social.sponsor.offer!;
+  check('ผู้ติดตาม 500 ได้ข้อเสนอขั้นร้านในชุมชน', ev?.type === 'sponsorOffer' && sponsorDef(of.key).tier === 0);
+  check('ข้อเสนอตรงชนิดสัตว์ (หมาไม่ได้งานทรายแมว)', !sponsorDef(of.key).species || sponsorDef(of.key).species!.includes('dog'));
+  // บังคับเป็นงานให้อาหาร เพื่อทดสอบต่อ
+  of.key = 'padaeng';
+  const old = addPhoto(g, { tier: 1, label: 'กินข้าว', kind: 'eat', petIds: [id] });
+  const m0 = g.money;
+  const r = acceptOffer(g);
+  check('รับงานได้มัดจำและอาหารฟรี', r.ok && g.money === m0 + of.upfront && g.supplies.meal_premium === 3);
+  const m1 = g.money; feed(g, id, 'premium');
+  check('ให้อาหารพรีเมียมใช้ของฟรีก่อน ไม่เสียเงิน', g.money === m1 && g.supplies.meal_premium === 2);
+  check('รูปที่ถ่ายก่อนรับงานส่งไม่ได้', !photoFits(g, old));
+  const wrong = addPhoto(g, { tier: 1, label: 'นอน', kind: 'sleep', petIds: [id] });
+  const right = addPhoto(g, { tier: 0, label: 'กินข้าว', kind: 'eat', petIds: [id] });
+  check('รูปตรงโจทย์เท่านั้นที่นับ', !photoFits(g, wrong) && photoFits(g, right));
+  const m2 = g.money, rp = post(g, right.id);
+  check('ส่งงานครบได้ค่าตอบแทนที่เหลือ', !!rp.r!.sponsor?.finished && g.money - m2 >= of.pay - of.upfront && !g.social.sponsor.active && g.social.sponsor.rep === 1);
+
+  // ส่งไม่ทัน: เสียผู้ติดตาม 5%
+  const g2 = setup('normal', 'korat', true).g;
+  g2.lastReal = 1000; g2.social.followers = 1000;
+  stepSponsor(g2); acceptOffer(g2);
+  const dl = g2.social.sponsor.active!.deadlineAt!;
+  g2.lastReal = dl - 1; stepSponsor(g2);
+  check('ยังไม่เลยกำหนด งานยังอยู่', !!g2.social.sponsor.active);
+  g2.lastReal = dl + 1;
+  const fe = stepSponsor(g2);
+  check('เลยกำหนด เสียผู้ติดตาม 5% และพักข้อเสนอ', fe?.type === 'sponsorFail' && g2.social.followers === 950 && g2.social.sponsor.nextOfferAt === dl + 1 + SPONSOR.failPauseH * H);
+  check('ปิดเกมทั้งคืนไม่กินเวลาส่งงานเกินจริง (นับเวลาจริง ไม่ใช่วันในเกม)', sponsorDef('padaeng').hours >= 24);
+
+  // เซฟเก่า v6 อัปเกรดได้
+  const v6 = JSON.parse(JSON.stringify(g)); v6.v = 6; delete v6.social.sponsor; for (const ph of v6.social.album) delete ph.tags;
+  const up = migrate(v6)!;
+  check('เซฟ v6 อัปเกรดเป็น v7 มีสปอนเซอร์และป้ายรูป', up.v === 7 && !!up.social.sponsor && up.social.album.every(p => Array.isArray(p.tags)));
 }
 
 // ---- เซฟเป็น JSON ได้ และเล่นต่อได้ผลเดิม ----
