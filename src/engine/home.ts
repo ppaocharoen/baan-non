@@ -7,7 +7,7 @@ import { nextRandom } from './rng';
 import { nightness } from './time';
 import { petStage, type Pet } from './pet';
 
-export type ItemKind = 'bed' | 'toilet' | 'bowl' | 'toy' | 'decor';
+export type ItemKind = 'bed' | 'toilet' | 'bowl' | 'perch' | 'decor';
 export interface Furniture {
   key: string; name: string; kind: ItemKind; species: Species[]; price: number; desc: string;
   /** ความกว้างโดยประมาณ (พิกเซลเกม) */
@@ -24,7 +24,11 @@ export interface Furniture {
   hang?: boolean;
 }
 export interface Supply { key: string; name: string; price: number; uses: number; desc: string; }
-export const SHOP = shopJson as { furniture: Furniture[]; supplies: Supply[] };
+/** ของเล่น: ซื้อแล้วอยู่ในกระเป๋า หยิบมาเล่นกับน้องทีละครั้ง ใช้ครบ uses ครั้งแล้วพัง */
+export interface ToyDef { key: string; name: string; species: Species[]; price: number; uses: number; desc: string; }
+export interface Toy { uid: number; key: string; left: number; }
+export const SHOP = shopJson as { furniture: Furniture[]; supplies: Supply[]; toys: ToyDef[] };
+export const toyOf = (k: string) => SHOP.toys.find(t => t.key === k)!;
 export const furnitureOf = (k: string) => SHOP.furniture.find(f => f.key === k)!;
 export const supplyOf = (k: string) => SHOP.supplies.find(s => s.key === k)!;
 
@@ -33,28 +37,42 @@ export type Lane = 0 | 1 | 2;
 export interface HomeItem { uid: number; key: string; /** null = เก็บอยู่ในคลัง */ x: number | null; lane: Lane; fill: number; room: RoomKey; }
 export interface Poop { id: number; x: number; day: number; petId: number; small: boolean; room: RoomKey; }
 
-/** ห้อง/ฉาก: ชานบ้านริมคลอง · ในบ้าน */
-export type RoomKey = 'terrace' | 'room';
-export const ROOM_KEYS: RoomKey[] = ['terrace', 'room'];
+/** ห้อง/ฉาก: ชานบ้านริมคลอง · ในบ้าน · ห้องที่ได้จากการต่อเติมบ้าน */
+export type RoomKey = 'terrace' | 'room' | 'under' | 'kitchen' | 'garden' | 'pier';
+/** ลำดับห้อง: 2 ห้องแรกมีตั้งแต่เริ่ม ที่เหลือปลดตามขั้นต่อเติม */
+export const ROOM_KEYS: RoomKey[] = ['terrace', 'room', 'under', 'kitchen', 'garden', 'pier'];
+export const ROOM_TH: Record<RoomKey, string> = { terrace: 'ชานบ้าน', room: 'ในบ้าน', under: 'ใต้ถุนเรือน', kitchen: 'ครัวหลังบ้าน', garden: 'สวนกล้วย', pier: 'ท่าน้ำ' };
 /** แนวพื้นที่เดินได้ของแต่ละฉาก (พิกัดโลก) ตามภาพ: ชานบ้าน = ระหว่างผนังซ้ายกับกระถาง/โอ่ง · ในบ้าน = ระหว่างกระถางซ้ายกับตู้ทีวี */
-export const FLOORS: Record<RoomKey, [number, number]> = { terrace: [40, 208], room: [32, 175] };
+export const FLOORS: Record<RoomKey, [number, number]> = { terrace: [40, 208], room: [32, 175], under: [24, 226], kitchen: [28, 222], garden: [22, 228], pier: [26, 200] };
 /** ชานบ้าน (เดิม) — คงไว้ให้โค้ดเก่า */
 export const FLOOR = FLOORS.terrace;
-/** แนวชายคาที่แขวนของได้ (พิกัดโลก) — ในบ้านไม่มี */
-export const HANG: Record<RoomKey, [number, number] | null> = { terrace: [54, 116], room: null };
+/** แนวชายคา/คานที่แขวนของได้ (พิกัดโลก) — ห้องที่ไม่มีเป็น null */
+export const HANG: Record<RoomKey, [number, number] | null> = { terrace: [54, 116], room: null, under: [40, 200], kitchen: null, garden: null, pier: [60, 150] };
+/** ต่อเติมบ้าน: แต่ละขั้นเลี้ยงได้เพิ่ม 1 ตัว และได้ห้องใหม่ 1 ห้อง */
+export const EXPANSIONS: { room: RoomKey; price: number; desc: string }[] = [
+  { room: 'under', price: 300, desc: 'ลานดินเย็นๆ ใต้เรือน มีแคร่กับเปลญวน' },
+  { room: 'kitchen', price: 600, desc: 'ครัวไทยหลังบ้าน มีชั้นวางกับโอ่งน้ำ' },
+  { room: 'garden', price: 1000, desc: 'สวนกล้วยหลังบ้าน มีรั้วไม้ไผ่กับตอไม้' },
+  { room: 'pier', price: 1500, desc: 'ท่าน้ำหน้าบ้าน มีบันไดลงคลองกับเสาผูกเรือ' },
+];
+/** ห้องที่ใช้ได้ตอนนี้ */
+export const roomsOf = (g: GameState): RoomKey[] => ROOM_KEYS.slice(0, 2 + (g.expand ?? 0));
+/** เลี้ยงได้สูงสุดกี่ตัว */
+export const maxPets = (g: GameState) => 2 + (g.expand ?? 0);
 export const POOP_CAP = 4;            // อึบนพื้นสะสมได้สูงสุด (กันกลับมาเจอบ้านพัง)
 export const HYGIENE = {
   cleanMultPerPoop: 0.2,              // ความสกปรกเพิ่มเร็วขึ้นต่ออึ 1 กอง
   bondPerPoop: -0.002,                // ผูกพันลดต่อวัน ต่ออึ 1 กอง
   riskPerPoop: 0.04,                  // โอกาสโรคผิวหนัง/ท้องเสียเพิ่ม ต่ออึที่เกิน 1 กอง
   bedBond: 0.004,                     // ผูกพันเพิ่มต่อวัน ตอนนอนบนที่นอน (กลางคืน)
+  /** มีที่เล่นในบ้าน (คอนโดแมว คอนนก) แตะเล่นได้ผูกพันมากขึ้น */
   toyPlayMult: 1.5,
   shampooDays: 7, shampooCleanMult: 0.6,
   treatMult: 1.3,
 };
 
 const speciesOf = (p: Pet) => breedOf(p.breed).species;
-export const fits = (f: Furniture, p: Pet) => f.species.includes(speciesOf(p));
+export const fits = (f: { species: Species[] }, p: Pet) => f.species.includes(speciesOf(p));
 export const placed = (g: GameState) => g.items.filter(i => i.x !== null);
 /** จำนวนอึบนพื้น (นกนับครึ่ง) */
 export const floorMess = (g: GameState) => g.poops.reduce((a, p) => a + (p.small ? 0.5 : 1), 0);
@@ -81,7 +99,7 @@ export function toiletFor(g: GameState, p: Pet): HomeItem | undefined {
   });
   return ok.find(i => i.room === p.room) ?? ok[0]; // ห้องเดียวกันก่อน
 }
-export const hasToy = (g: GameState, p: Pet) => placed(g).some(i => { const f = furnitureOf(i.key); return (f.kind === 'toy' || f.toy) && fits(f, p); });
+export const hasToy = (g: GameState, p: Pet) => placed(g).some(i => { const f = furnitureOf(i.key); return !!f.toy && fits(f, p); });
 export const toiletCap = (f: Furniture) => (f.kind === 'toilet' ? f.cap : f.toilet) ?? 0;
 
 // ---------------- เวลาเดิน ----------------
@@ -169,4 +187,22 @@ export function useSupply(g: GameState, key: string): boolean {
   if ((g.supplies[key] ?? 0) <= 0) return false;
   g.supplies[key]--;
   return true;
+}
+
+export function buyToy(g: GameState, key: string): Result {
+  const t = toyOf(key);
+  if (!t) return fail('ไม่มีของนี้');
+  if (g.money < t.price) return fail('เงินไม่พอ');
+  g.money -= t.price;
+  g.toys.push({ uid: g.nextUid++, key, left: t.uses });
+  return { ok: true };
+}
+/** ต่อเติมบ้านขั้นถัดไป */
+export function expandHome(g: GameState): Result & { room?: RoomKey } {
+  const lv = g.expand ?? 0, e = EXPANSIONS[lv];
+  if (!e) return fail('ต่อเติมครบแล้ว');
+  if (g.money < e.price) return fail('เงินไม่พอ');
+  g.money -= e.price;
+  g.expand = lv + 1;
+  return { ok: true, room: e.room };
 }

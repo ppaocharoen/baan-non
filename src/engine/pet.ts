@@ -35,6 +35,9 @@ export interface Pet {
   bathBondDay: number;
   playDay: number;
   playsToday: number;
+  /** เล่นด้วยของเล่น: วันล่าสุด · ครั้งในวันนั้น */
+  toyDay: number;
+  toysToday: number;
   /** นาฬิกาดูแลสุขภาพ (วัน): เดินช้าลงตอนปิดเกมเท่ากับความหิว — ใช้นับรอบวัคซีน/ถ่ายพยาธิ */
   careClock: number;
   /** อีกกี่วันจะขับถ่าย (-1 = ไม่มีค้าง) */

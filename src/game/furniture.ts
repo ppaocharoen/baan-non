@@ -29,8 +29,8 @@ function sprite(c: CanvasRenderingContext2D, key: string, x: number, y: number, 
   return true;
 }
 
-/** วาดชิ้นจากชีตตามความกว้างที่กำหนด (ใช้กับอึในถาด) */
-function spriteW(c: CanvasRenderingContext2D, key: string, x: number, y: number, rx: (v: number) => number, w: number): boolean {
+/** วาดชิ้นจากชีตตามความกว้างที่กำหนด (ใช้กับอึในถาด และของเล่นตอนเล่นกับน้อง) */
+export function spriteW(c: CanvasRenderingContext2D, key: string, x: number, y: number, rx: (v: number) => number, w: number): boolean {
   const a = ATLAS[key];
   if (!a || !sheetReady()) return false;
   const h = (a[3] * w) / a[2];
@@ -47,7 +47,7 @@ const P = {
 };
 
 /** ความสูงโดยประมาณของแต่ละชิ้น (ใช้ทำกล่องแตะ) */
-export const ITEM_H: Record<string, number> = { bed: 8, coolmat: 3, condo: 32, cage: 26, litter: 7, peepad: 3, bowl: 6, ball: 6, wand: 14, perch: 14, plant: 16, lamp: 18, rug: 3 };
+export const ITEM_H: Record<string, number> = { rope: 5, bell: 12, bed: 8, coolmat: 3, condo: 32, cage: 26, litter: 7, peepad: 3, bowl: 6, ball: 6, wand: 14, perch: 14, plant: 16, lamp: 18, rug: 3 };
 
 /** ขนาดของในฉากเทียบกับแบบที่วาด (ให้เข้ากับตัวน้อง) */
 export const ITEM_SCALE = 1.6;
@@ -123,6 +123,13 @@ function drawBody(c: CanvasRenderingContext2D, key: string, x: number, y: number
       break;
     case 'rug':
       r(-15, -2, 30, 2, P.redD); r(-14, -2, 28, 1, P.red); for (let i = -12; i < 14; i += 5) r(i, -2, 2, 1, P.gold);
+      break;
+    case 'rope': // เชือกกัดดึง: เชือกบิดเกลียว ปมสองข้าง
+      for (let i = -5; i < 5; i++) r(i, -3 + (i % 2 ? 0 : 1), 1, 2, i % 2 ? P.red : P.cream);
+      r(-7, -4, 3, 4, P.redD); r(4, -4, 3, 4, P.redD);
+      break;
+    case 'bell': // กระดิ่งนก: เชือก + กระดิ่งทอง
+      r(0, -12, 1, 5, P.woodD); r(-2, -7, 5, 5, P.goldD); r(-1, -7, 3, 4, P.gold); r(0, -2, 1, 1, P.ink);
       break;
   }
 }

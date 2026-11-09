@@ -7,9 +7,9 @@
 // หมายเหตุ: ยังไม่มีรายได้จนกว่าจะถึงขั้น 5 → sim ให้เงินไม่จำกัด เพื่อดูแค่เรื่องการดูแล
 import { BALANCE as B, type Mode } from '../src/engine/balance';
 import { BREEDS } from '../src/engine/content';
-import { adopt, bathe, canTrain, catchUpOffline, coax, feed, newGame, play, routineCare, tickOnline, train, treat, vaccinate, type GameState } from '../src/engine/core';
+import { adopt, bathe, brush, canTrain, groomKind, catchUpOffline, coax, feed, newGame, play, routineCare, tickOnline, train, treat, vaccinate, type GameState } from '../src/engine/core';
 import { careFor, dueItems, vaccinesFor } from '../src/engine/health';
-import { buyFurniture, buySupply, cleanPoop, emptyToilet, furnitureOf, placeItem } from '../src/engine/home';
+import { buyFurniture, buySupply, cleanPoop, emptyToilet, EXPANSIONS, expandHome, furnitureOf, maxPets, placeItem } from '../src/engine/home';
 import { breedOf } from '../src/engine/content';
 import { addPhoto, post, postsLeft } from '../src/engine/social';
 import { acceptOffer, declineOffer, photoFits, sponsorDef } from '../src/engine/sponsor';
@@ -61,7 +61,9 @@ function careSession(g: GameState, now: number, minutes: number, rngHits: { rng:
       for (const v of due.vax) vaccinate(g, p.id, v.key);
       for (const c of due.care) routineCare(g, p.id, c.key);
       if (p.full < 0.7) feed(g, p.id, 'kibble');
-      if (p.clean < 0.5 && g.day >= p.health.postVaxUntil) bathe(g, p.id);
+      const gk = groomKind(p);
+      if (gk === 'brush' && p.clean < 0.6) brush(g, p.id);
+      else if (gk === 'tub' && g.day >= p.health.postVaxUntil) bathe(g, p.id);
       for (let i = 0; i < B.playsPerDay; i++) play(g, p.id);
       if (canTrain(g, p)) train(g, p.id, 3 + Math.floor(nextRandom(rngHits) * 3));
     }
@@ -256,6 +258,40 @@ function socialSession(g: GameState, r: { rng: number }) {
   goal('6. สปอนเซอร์เป็นรายได้เสริม ไม่ใช่รายได้หลัก (10–45% ของรายได้เพจ)', share > 0.1 && share < 0.45,
     `สัดส่วน ${(share * 100).toFixed(0)}% · ทำสำเร็จเฉลี่ย ${avg(spDone).toFixed(1)} งาน · ไม่ทัน ${avg(spFail).toFixed(1)} งาน ใน 60 วัน`);
   goal('5. ผู้เล่นดูแลดีมีเงินพอ (ไม่ติดลบ)', broke === 0, `${runs} รอบ ติดลบ ${broke} · เงินเฉลี่ยตอนจบ ${avg(money).toFixed(0)}`);
+}
+
+// ---------- เป้า 7: ต่อเติมบ้านจนเลี้ยง 6 ตัว เงินยังไม่ติดลบ ----------
+{
+  const SESSIONS: [number, number][] = [[8, 15], [12.5, 10], [20, 30]];
+  const reach: number[][] = [[], [], [], []], money: number[] = [];
+  let broke = 0, runs = 0;
+  for (let seed = 1; seed <= 20; seed++) {
+    const breeds = BREEDS.map(b => b.key);
+    const { g } = fresh('normal', seed * 53 + 3, breeds[seed % breeds.length]);
+    g.money = B.startMoney;
+    const r = { rng: seed }, hits = { rng: seed + 7 };
+    let minMoney = Infinity;
+    for (let d = 0; d < 60; d++) {
+      for (const [h, mins] of SESSIONS) {
+        careSession(g, d * 24 * H + h * H, mins, hits);
+        socialSession(g, r);
+        // ผู้เล่นเก็บเงินต่อเติม แล้วรับน้องเพิ่มเมื่อมีที่ (เหลือเงินกันชน 150)
+        const ex = EXPANSIONS[g.expand];
+        if (ex && g.pets.length >= maxPets(g) && g.money >= ex.price + B.adoptPrice + 150) { expandHome(g); reach[g.expand - 1].push(d + 1); }
+        if (g.pets.length < maxPets(g) && g.money >= B.adoptPrice + 150) {
+          const pet = adopt(g, breeds[(g.pets.length + seed) % breeds.length], 'น้อน', B.adoptPrice).pet;
+          if (pet) upToDate(g, pet);
+        }
+        minMoney = Math.min(minMoney, g.money);
+      }
+    }
+    money.push(g.money);
+    if (minMoney < 0) broke++;
+    runs++;
+  }
+  const avg = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN);
+  goal('7. ต่อเติมบ้านเลี้ยงหลายตัว เงินไม่ติดลบ', broke === 0,
+    `${runs} รอบ ติดลบ ${broke} · ต่อเติมขั้น 1–4 ได้ในวันจริงที่ ${reach.map(x => `${avg(x).toFixed(0)} (${x.length}/${runs})`).join(' · ')} · เงินตอนจบ ${avg(money).toFixed(0)}`);
 }
 
 if (failed) {

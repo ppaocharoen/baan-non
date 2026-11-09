@@ -64,9 +64,12 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .trainbar { position: relative; height: 26px; border: 2px solid var(--lcd-ink); border-radius: 6px; margin: 10px 0; background: var(--lcd-off); overflow: hidden; }
 .trainbar .zone { position: absolute; top: 0; bottom: 0; background: #5DCAA5; }
 .trainbar .mark { position: absolute; top: -2px; bottom: -2px; width: 4px; margin-left: -2px; background: var(--lcd-ink); }
+.traincv { display: block; width: 100%; aspect-ratio: 16 / 9; image-rendering: pixelated; border: 2px solid var(--lcd-ink); border-radius: 6px; margin: 8px 0; touch-action: manipulation; }
 .taps { display: flex; gap: 6px; justify-content: center; font-size: 18px; }
 
-.btns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.btns { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.wear { display: block; height: 5px; margin-top: 3px; border: 1px solid var(--lcd-ink); border-radius: 3px; overflow: hidden; }
+.wear i { display: block; height: 100%; background: #5DCAA5; }
 .btns button { height: 58px; background: var(--chip); border: 2px solid var(--ink); border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center;
   font-size: 13px; position: relative; transition: transform .08s; }
 .btns button:active { transform: scale(.95); }

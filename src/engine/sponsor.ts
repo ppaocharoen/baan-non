@@ -5,7 +5,7 @@ import sponsorsJson from '../../data/sponsors.json';
 import type { GameState } from './core';
 import { breedOf } from './content';
 import { dueItems } from './health';
-import { furnitureOf, placed, toiletCap } from './home';
+import { furnitureOf, placed, toiletCap, toyOf } from './home';
 import { isSick } from './pet';
 import { nextRandom } from './rng';
 
@@ -14,7 +14,7 @@ export type Quest = 'eat' | 'play' | 'bath' | 'high' | 'two' | 'sleep' | 'clean'
 export interface SponsorDef {
   key: string; brand: string; color: string; tier: number; species?: string[]; quest: Quest;
   need: number; minTier: number; /** เวลาส่งงาน ชั่วโมงจริง */ hours: number; minPets?: number; pitch: string;
-  gift?: { meal?: string; supply?: string; item?: string; n?: number };
+  gift?: { meal?: string; supply?: string; item?: string; toy?: string; n?: number };
 }
 export const SPONSORS = sponsorsJson as SponsorDef[];
 export const sponsorDef = (k: string) => SPONSORS.find(s => s.key === k)!;
@@ -139,6 +139,7 @@ function giveGift(g: GameState, def: SponsorDef): string | undefined {
   if (gf.meal) { g.supplies[`meal_${gf.meal}`] = (g.supplies[`meal_${gf.meal}`] ?? 0) + (gf.n ?? 1); return `อาหารพรีเมียมฟรี ${gf.n} มื้อ`; }
   if (gf.supply) { g.supplies[gf.supply] = (g.supplies[gf.supply] ?? 0) + (gf.n ?? 1); return `${giftName(gf.supply)} ${gf.n} ครั้ง`; }
   if (gf.item) { g.items.push({ uid: g.nextUid++, key: gf.item, x: null, lane: 0, fill: 0, room: 'terrace' }); return `${furnitureOf(gf.item).name} (อยู่ในคลัง)`; }
+  if (gf.toy) { const t = toyOf(gf.toy); g.toys.push({ uid: g.nextUid++, key: t.key, left: t.uses }); return `${t.name} (อยู่ในกล่องของเล่น)`; }
   return undefined;
 }
 const giftName = (k: string) => ({ sand: 'ทรายแมว', pad: 'แผ่นรองฉี่', shampoo: 'แชมพู', treat: 'ขนมฝึก' } as Record<string, string>)[k] ?? k;
@@ -147,6 +148,7 @@ export const giftText = (def: SponsorDef) => {
   if (gf.meal) return `อาหารพรีเมียมฟรี ${gf.n} มื้อ`;
   if (gf.supply) return `${giftName(gf.supply)} ${gf.n} ครั้ง`;
   if (gf.item) return furnitureOf(gf.item).name;
+  if (gf.toy) return toyOf(gf.toy).name;
   return '';
 };
 

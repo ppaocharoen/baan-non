@@ -5,12 +5,12 @@ import { breedOf, foodOf } from './content';
 import { nextRandom } from './rng';
 import { offlineDays, onlineDays } from './time';
 import { careOf, diseaseOf, diseaseRisks, HEALTH, newHealth, vaccineOf, vaccineState, careState } from './health';
-import { digest, floorMess, hasToy, HYGIENE, stepHome, useSupply, type HomeItem, type Poop, type PoopEvent } from './home';
+import { digest, fits, floorMess, hasToy, HYGIENE, maxPets, stepHome, toyOf, useSupply, type HomeItem, type Poop, type PoopEvent, type Toy } from './home';
 import { newSocial, passiveIncome, type SocialState } from './social';
 import { stepSponsor, type SponsorEvent } from './sponsor';
 import { decayPet, isPostVax, isSick, petAge, petStage, type Grave, type Pet } from './pet';
 
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 
 export interface GameState {
   v: number;
@@ -27,6 +27,10 @@ export interface GameState {
   items: HomeItem[];
   /** ของสิ้นเปลือง: จำนวนครั้งที่ใช้ได้ */
   supplies: Record<string, number>;
+  /** กล่องของเล่น (ใช้แล้วเสื่อม) */
+  toys: Toy[];
+  /** ต่อเติมบ้านไปแล้วกี่ขั้น (0–4) */
+  expand: number;
   /** อึบนพื้น */
   poops: Poop[];
   nextUid: number;
@@ -50,7 +54,7 @@ const fail = (reason: string): Result => ({ ok: false, reason });
 const OK: Result = { ok: true };
 
 export function newGame(mode: Mode, seed: number, nowMs: number): GameState {
-  return { v: SAVE_VERSION, mode, rng: seed >>> 0, day: B.startDay, money: B.startMoney, pets: [], heaven: [], nextId: 1, items: [], supplies: {}, poops: [], nextUid: 1, social: newSocial(), lastReal: nowMs };
+  return { v: SAVE_VERSION, mode, rng: seed >>> 0, day: B.startDay, money: B.startMoney, pets: [], heaven: [], nextId: 1, items: [], supplies: {}, toys: [], expand: 0, poops: [], nextUid: 1, social: newSocial(), lastReal: nowMs };
 }
 
 export const petById = (g: GameState, id: number) => g.pets.find(p => p.id === id);
@@ -131,7 +135,7 @@ export function catchUpOffline(g: GameState, nowMs: number): { days: number; eve
 
 export function adopt(g: GameState, breedKey: string, name: string, price = 0): Result & { pet?: Pet } {
   const br = breedOf(breedKey);
-  if (g.pets.length >= B.maxPets) return fail('บ้านเต็มแล้ว');
+  if (g.pets.length >= maxPets(g)) return fail('บ้านเต็มแล้ว');
   if (g.money < price) return fail('เงินไม่พอ');
   g.money -= price;
   const lifespan = br.life[0] + Math.floor(nextRandom(g) * (br.life[1] - br.life[0] + 1));
@@ -139,7 +143,7 @@ export function adopt(g: GameState, breedKey: string, name: string, price = 0): 
     id: g.nextId++, breed: br.key, name, born: g.day, lifespan, status: 'home', room: 'terrace',
     full: 0.8, clean: 0.8, bond: 0.1, trained: 0, health: newHealth(), sickDays: 0,
     hungryDays: 0, dirtyDays: 0, starveDays: 0, lastFoodSick: 1,
-    fedBondDay: -1, bathBondDay: -1, playDay: -1, playsToday: 0, lastTrain: -1e9, poopIn: -1, shampooUntil: -1, careClock: 0,
+    fedBondDay: -1, bathBondDay: -1, playDay: -1, playsToday: 0, toyDay: -1, toysToday: 0, lastTrain: -1e9, poopIn: -1, shampooUntil: -1, careClock: 0,
   };
   g.pets.push(pet);
   return { ...OK, pet };
@@ -182,6 +186,35 @@ export function bathe(g: GameState, id: number): Result & { fever?: boolean; sha
     return { ...OK, fever: true, shampoo };
   }
   return { ...OK, shampoo };
+}
+
+/** วิธีทำความสะอาดที่ต้องใช้ตอนนี้: สกปรกมาก → ลงอ่าง · สกปรกน้อย → แปรงขน (นก: พ่นน้ำ) */
+export const groomKind = (p: Pet): 'none' | 'brush' | 'tub' => (p.clean >= B.cleanEnough ? 'none' : p.clean < B.heavyDirtyBelow ? 'tub' : 'brush');
+
+/** แปรงขน (หมา/แมว) หรือพ่นละอองน้ำ (นก) — สำหรับตอนสกปรกน้อย */
+export function brush(g: GameState, id: number): Result {
+  const p = atHome(g, id); if (!isPet(p)) return p;
+  if (p.clean < B.heavyDirtyBelow) return fail('สกปรกมากแล้ว ต้องอาบน้ำในอ่าง');
+  if (p.clean >= B.cleanEnough) return fail('ยังสะอาดอยู่');
+  p.clean = Math.min(1, p.clean + B.brushGain);
+  if (p.bathBondDay !== today(g)) { p.bathBondDay = today(g); addBond(p, B.bondBathe); }
+  return OK;
+}
+
+/** เล่นด้วยของเล่น: ผูกพันเพิ่ม · ของเล่นเสื่อมลง 1 ครั้ง ใช้ครบแล้วพัง */
+export function playToy(g: GameState, id: number, uid: number): Result & { broke?: boolean; left?: number } {
+  const p = atHome(g, id); if (!isPet(p)) return p;
+  const t = g.toys.find(x => x.uid === uid);
+  if (!t) return fail('ไม่พบของเล่น');
+  const def = toyOf(t.key);
+  if (!fits(def, p)) return fail(`${p.name}ไม่เล่น${def.name}`);
+  if (p.toyDay !== today(g)) { p.toyDay = today(g); p.toysToday = 0; }
+  if (p.toysToday >= B.toyPlaysPerDay) return fail('วันนี้น้องเล่นของเล่นจนเหนื่อยแล้ว');
+  p.toysToday++;
+  addBond(p, B.bondToy);
+  t.left--;
+  if (t.left <= 0) { g.toys = g.toys.filter(x => x !== t); return { ...OK, broke: true, left: 0 }; }
+  return { ...OK, left: t.left };
 }
 
 export function play(g: GameState, id: number): Result {

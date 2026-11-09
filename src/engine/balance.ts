@@ -22,9 +22,15 @@ export const BALANCE = {
 
   // ---- ค่าที่ลดลงตามเวลา (ต่อวัน) ----
   fullDecay: 0.04,
-  cleanDecay: 0.03,
+  cleanDecay: 0.05,   // v0.2.9: เร็วขึ้นจาก 0.03 ให้แปรง/อาบน้ำเป็นกิจวัตร
   hungryBelow: 0.15,
   dirtyBelow: 0.2,
+  /** สะอาดต่ำกว่านี้ = สกปรกมาก ต้องลงอ่าง · สูงกว่านี้แปรงขนพอ */
+  heavyDirtyBelow: 0.4,
+  /** ยังสะอาดอยู่ (ไม่ต้องอาบ/แปรง) */
+  cleanEnough: 0.92,
+  /** แปรงขน/พ่นน้ำ: สะอาดเพิ่มเท่านี้ */
+  brushGain: 0.4,
 
   // ---- ความผูกพัน (ต่อวัน หรือต่อครั้ง) ----
   bondTogether: 0.0008,
@@ -35,6 +41,9 @@ export const BALANCE = {
   bondBathe: 0.02,    // นับวันละครั้ง
   bondPlay: 0.02,
   playsPerDay: 3,
+  /** เล่นด้วยของเล่น (ต่อครั้ง) · ครั้งต่อวันต่อตัว */
+  bondToy: 0.04,
+  toyPlaysPerDay: 2,
 
   // ---- ฝึก ----
   trainCooldown: 7,
@@ -58,7 +67,8 @@ export const BALANCE = {
   startMoney: 300,
   adoptPrice: 200,
   coaxCost: 60,
-  maxPets: 2,
+  /** เลี้ยงได้ตอนเริ่ม · ต่อเติมบ้านเพิ่มทีละช่อง (EXPANSIONS ใน home.ts) */
+  baseSlots: 2,
 
   modes: {
     /** ละเลยนานมาก: หนีไปบ้านป้า (ตามกลับได้) */

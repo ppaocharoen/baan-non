@@ -2,7 +2,7 @@
   { "key": "padaeng", "brand": "ร้านอาหารสัตว์ป้าแดง", "color": "#c0392b", "tier": 0, "quest": "eat", "need": 1, "minTier": 0, "hours": 24,
     "gift": { "meal": "premium", "n": 3 }, "pitch": "ป้าฝากอาหารพรีเมียมมาให้น้องลอง 3 มื้อจ้ะ ขอรูปน้องตอนกินสักรูปนะ" },
   { "key": "lungmoo", "brand": "ร้านของเล่นลุงหมู", "color": "#e67e22", "tier": 0, "species": ["dog", "cat"], "quest": "play", "need": 1, "minTier": 0, "hours": 24,
-    "gift": { "item": "ball" }, "pitch": "ลุงฝากลูกบอลมาให้ ขอรูปน้องตอนเล่นหรือฝึกสักรูปนะ" },
+    "gift": { "toy": "ball" }, "pitch": "ลุงฝากลูกบอลมาให้ ขอรูปน้องตอนเล่นหรือฝึกสักรูปนะ" },
   { "key": "baanthung", "brand": "ทรายแมวบ้านทุ่ง", "color": "#a1887f", "tier": 0, "species": ["cat"], "quest": "clean", "need": 1, "minTier": 0, "hours": 24,
     "gift": { "supply": "sand", "n": 6 }, "pitch": "ส่งทรายแมวมาให้ลองค่ะ ขอรูปน้องตอนบ้านสะอาด ไม่มีอึบนพื้นและกระบะทรายว่าง" },
   { "key": "dijang", "brand": "แผ่นรองซับดีจัง", "color": "#5dade2", "tier": 0, "species": ["dog"], "quest": "clean", "need": 1, "minTier": 0, "hours": 24,

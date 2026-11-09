@@ -1,8 +1,8 @@
 // ทดสอบเครื่องยนต์ — รันใน CI ก่อน sim และ build
 import { BALANCE as B } from '../src/engine/balance';
 import { BREEDS, breedOf, FOODS } from '../src/engine/content';
-import { adopt, advance, bathe, canTrain, catchUpOffline, coax, feed, newGame, play, routineCare, tickOnline, train, treat, vaccinate, type GameState } from '../src/engine/core';
-import { buyFurniture, buySupply, cleanPoop, emptyToilet, placeItem, toiletFor } from '../src/engine/home';
+import { adopt, advance, bathe, brush, canTrain, catchUpOffline, coax, feed, groomKind, newGame, play, playToy, routineCare, tickOnline, train, treat, vaccinate, type GameState } from '../src/engine/core';
+import { buyFurniture, buySupply, buyToy, cleanPoop, emptyToilet, expandHome, EXPANSIONS, maxPets, placeItem, roomsOf, toiletFor, toyOf } from '../src/engine/home';
 import { addPhoto, post, postsLeft, SOCIAL } from '../src/engine/social';
 import { acceptOffer, photoFits, SPONSOR, sponsorDef, stepSponsor } from '../src/engine/sponsor';
 import { migrate } from '../src/game/store';
@@ -202,9 +202,50 @@ function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew', protect =
   check('อาบน้ำใช้แชมพู', bathe(g, id).shampoo === true && g.supplies.shampoo === 2);
   buySupply(g, 'treat');
   check('ฝึกใช้ขนม ได้ผลเพิ่ม', train(g, id, 5).treat === true && near(p.trained, B.trainGain * 1.3));
-  buyFurniture(g, 'ball'); placeItem(g, g.items[0].uid, 50);
+  buyFurniture(g, 'bed'); placeItem(g, g.items[0].uid, 50);
   const b0 = p.bond; play(g, id);
-  check('มีของเล่น เล่นได้ผูกพันมากขึ้น', near(p.bond - b0, B.bondPlay * 1.5));
+  check('เบาะนอนไม่ใช่ที่เล่น แตะเล่นได้ผูกพันปกติ', near(p.bond - b0, B.bondPlay));
+}
+
+// ---- ของเล่นใช้แล้วเสื่อม ----
+{
+  const { g, id } = setup('normal', 'bangkaew', true);
+  const p = g.pets[0];
+  check('หมาซื้อลูกบอลได้ เข้ากล่องของเล่น ไม่ได้วางในฉาก', buyToy(g, 'ball').ok && g.toys.length === 1 && g.items.length === 0);
+  buyToy(g, 'wand');
+  const ball = g.toys[0], wand = g.toys[1];
+  check('หมาเล่นไม้ตกแมวไม่ได้', !playToy(g, id, wand.uid).ok);
+  const b0 = p.bond, r = playToy(g, id, ball.uid);
+  check('เล่นลูกบอล: ผูกพันเพิ่ม และความทนลด 1', r.ok && near(p.bond - b0, B.bondToy) && ball.left === toyOf('ball').uses - 1);
+  playToy(g, id, ball.uid);
+  check(`เล่นของเล่นได้วันละ ${B.toyPlaysPerDay} ครั้ง`, !playToy(g, id, ball.uid).ok);
+  let broke = false;
+  for (let d = 0; d < 20 && !broke; d++) { advance(g, 1); feed(g, id, 'rice'); tidy(g); for (let i = 0; i < 2; i++) broke = !!playToy(g, id, ball.uid).broke || broke; }
+  check('เล่นครบจำนวนครั้งแล้วของเล่นพัง หายจากกล่อง', broke && !g.toys.some(t => t.uid === ball.uid));
+}
+
+// ---- สกปรกน้อยแปรง สกปรกมากลงอ่าง ----
+{
+  const { g, id } = setup('normal', 'korat', true);
+  const p = g.pets[0];
+  p.clean = 0.95; check('สะอาดอยู่ ไม่ต้องทำอะไร', groomKind(p) === 'none' && !brush(g, id).ok);
+  p.clean = 0.6; check('สกปรกน้อย → แปรงขน สะอาดเพิ่ม', groomKind(p) === 'brush' && brush(g, id).ok && near(p.clean, 0.6 + B.brushGain));
+  p.clean = 0.3; check('สกปรกมาก → ต้องลงอ่าง แปรงไม่ได้', groomKind(p) === 'tub' && !brush(g, id).ok);
+  bathe(g, id); check('ลงอ่างแล้วสะอาดเต็ม', p.clean === 1);
+}
+
+// ---- ต่อเติมบ้าน ----
+{
+  const { g } = setup();
+  check('เริ่มเลี้ยงได้ 2 ตัว 2 ห้อง', maxPets(g) === 2 && roomsOf(g).length === 2);
+  adopt(g, 'korat', 'b');
+  check('บ้านเต็มรับเพิ่มไม่ได้', !adopt(g, 'myna', 'c').ok);
+  g.money = 0; check('เงินไม่พอต่อเติมไม่ได้', !expandHome(g).ok);
+  g.money = 1e5;
+  for (const e of EXPANSIONS) check(`ต่อเติม ${e.room} ได้ห้องใหม่`, expandHome(g).room === e.room);
+  check('ต่อเติมครบ เลี้ยงได้ 6 ตัว 6 ห้อง', maxPets(g) === 6 && roomsOf(g).length === 6 && !expandHome(g).ok);
+  for (const b of ['myna', 'nokkhao', 'langan', 'khaomanee']) adopt(g, b, b);
+  check('รับครบ 6 ตัว', g.pets.length === 6 && !adopt(g, 'bulbul', 'x').ok);
 }
 
 // ---- เพจบ้านน้อน ----
@@ -269,7 +310,13 @@ function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew', protect =
   // เซฟเก่า v6 อัปเกรดได้
   const v6 = JSON.parse(JSON.stringify(g)); v6.v = 6; delete v6.social.sponsor; for (const ph of v6.social.album) delete ph.tags;
   const up = migrate(v6)!;
-  check('เซฟ v6 อัปเกรดเป็น v7 มีสปอนเซอร์และป้ายรูป', up.v === 7 && !!up.social.sponsor && up.social.album.every(p => Array.isArray(p.tags)));
+  check('เซฟ v6 อัปเกรดเป็นปัจจุบัน มีสปอนเซอร์และป้ายรูป', up.v === 8 && !!up.social.sponsor && up.social.album.every(p => Array.isArray(p.tags)));
+  // v7 → v8: ลูกบอล/ไม้ตกแมวที่วางในฉาก ย้ายเข้ากล่องของเล่น
+  const v7 = JSON.parse(JSON.stringify(g)); v7.v = 7; delete v7.toys; delete v7.expand;
+  v7.items = [{ uid: 900, key: 'ball', x: 60, lane: 0, fill: 0, room: 'terrace' }, { uid: 901, key: 'bed', x: 80, lane: 0, fill: 0, room: 'terrace' }];
+  for (const q of v7.pets) { delete q.toyDay; delete q.toysToday; }
+  const u8 = migrate(v7)!;
+  check('เซฟ v7: ลูกบอลย้ายเข้ากล่องของเล่น เบาะยังอยู่ ต่อเติม 0', u8.v === 8 && u8.toys.length === 1 && u8.toys[0].left === 15 && u8.items.length === 1 && u8.expand === 0);
 }
 
 // ---- เซฟเป็น JSON ได้ และเล่นต่อได้ผลเดิม ----

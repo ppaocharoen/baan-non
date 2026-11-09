@@ -59,6 +59,14 @@ export function migrate(g: any): GameState | null {
     for (const ph of g.social.album ?? []) ph.tags ??= [];
     g.v = 7;
   }
+  if (g.v === 7) { // v7 → v8: ของเล่นเป็นของในกล่อง (ใช้แล้วเสื่อม) · ต่อเติมบ้าน
+    g.toys ??= []; g.expand ??= 0;
+    const USES: Record<string, number> = { ball: 15, wand: 12 };
+    for (const i of g.items ?? []) if (USES[i.key]) g.toys.push({ uid: i.uid, key: i.key, left: USES[i.key] });
+    g.items = (g.items ?? []).filter((i: { key: string }) => !USES[i.key]);
+    for (const p of g.pets ?? []) { p.toyDay ??= -1; p.toysToday ??= 0; }
+    g.v = 8;
+  }
   return g as GameState;
 }
 

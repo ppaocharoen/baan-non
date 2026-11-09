@@ -3,13 +3,13 @@ import './game.css';
 import { BALANCE as B, type Mode } from '../engine/balance';
 import { BREEDS, FOODS, breedOf } from '../engine/content';
 import {
-  adopt, advance, bathe, canTrain, catchUpOffline, coax, daysUntilTrain, feed, newGame, petById, play, routineCare, tickOnline, train, treat, vaccinate,
+  adopt, advance, bathe, brush, canTrain, catchUpOffline, coax, daysUntilTrain, feed, groomKind, newGame, petById, play, playToy, routineCare, tickOnline, train, treat, vaccinate,
   type GameEvent, type GameState,
 } from '../engine/core';
 import { careFor, careState, diseaseOf, dueItems, HEALTH, vaccineState, vaccinesFor, type ItemState } from '../engine/health';
 import { isPostVax, isSick, mood, petAge, petStage, type Pet } from '../engine/pet';
 import { calendar, nightness, SEASONS } from '../engine/time';
-import { Scene } from './scene';
+import { Scene, type FxKind } from './scene';
 import { allPhotos, clearGame, loadGame, loadSettings, migrate, photoUrl, replacePhotos, saveGame, savePhoto, saveSettings, type Settings } from './store';
 import { makeBackupFile, makeSaveCode, readBackupFile, readSaveCode } from './transfer';
 import { addPhoto, freshness, hourFactor, post, postsLeft, SOCIAL, TIER_TH } from '../engine/social';
@@ -20,7 +20,7 @@ import { petPitch, sfx } from './sound';
 import { itemThumb } from './furniture';
 import { CHANGELOG, VERSION } from './changelog';
 import { checkCode } from './codes';
-import { buyFurniture, buySupply, cleanPoop, emptyToilet, furnitureOf, HANG, placeItem, SHOP, storeItem, supplyOf, toiletCap, type Furniture } from '../engine/home';
+import { buyFurniture, buySupply, buyToy, cleanPoop, emptyToilet, EXPANSIONS, expandHome, fits, furnitureOf, HANG, maxPets, placeItem, ROOM_TH, roomsOf, SHOP, storeItem, supplyOf, toiletCap, toyOf, type Furniture, type RoomKey } from '../engine/home';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const params = new URLSearchParams(location.search);
@@ -48,11 +48,23 @@ const scene = new Scene($<HTMLCanvasElement>('scene'), {
   onTapPoop: id => { if (g && cleanPoop(g, id).ok) { sfx.sweep(); toast('เก็บกวาดแล้ว ✨', 1200); } },
   onTapItem: uid => (scene.editMode ? itemMenu(uid) : useItem(uid)),
   onMoveItem: (uid, x, lane) => { if (g) placeItem(g, uid, x, lane); },
-  onRoomChange: room => {
-    $('room-label').textContent = room === 'terrace' ? 'เข้าบ้าน' : 'ออกชาน';
-    ($('room-ic') as HTMLImageElement).src = `./art/ui/${room === 'terrace' ? 'house' : 'sun'}.png`;
-  },
+  onRoomChange: room => roomLabel(room),
 });
+
+/** ปุ่มห้อง: มี 2 ห้องสลับไปมา · ต่อเติมแล้วเปิดรายการห้อง */
+function roomLabel(room: RoomKey) {
+  const many = !!g && roomsOf(g).length > 2;
+  $('room-label').textContent = many ? `${ROOM_TH[room]} ▾` : room === 'terrace' ? 'เข้าบ้าน' : 'ออกชาน';
+  ($('room-ic') as HTMLImageElement).src = `./art/ui/${!many && room === 'room' ? 'sun' : 'house'}.png`;
+}
+function roomPicker() {
+  if (!g) return;
+  const s = openPop(`${head('ไปห้องไหนดี')}${roomsOf(g).map(r => {
+    const here = g!.pets.filter(p => p.status === 'home' && p.room === r).map(p => p.name);
+    return `<button class="opt ${r === scene.viewRoom ? 'sel' : ''}" data-r="${r}"><span>${ROOM_TH[r]}<br><small>${here.length ? here.join(', ') : 'ไม่มีน้องอยู่'}</small></span>›</button>`;
+  }).join('')}${(g.expand ?? 0) < EXPANSIONS.length ? '<p><small>ต่อเติมบ้านได้ที่ร้าน · ได้ห้องใหม่และเลี้ยงน้องได้เพิ่ม</small></p>' : ''}`);
+  s.querySelectorAll<HTMLElement>('[data-r]').forEach(el => el.addEventListener('click', () => { closePop(); scene.showRoom(el.dataset.r as RoomKey); }));
+}
 
 // สำหรับทดสอบอัตโนมัติ
 (window as unknown as { __bn: unknown }).__bn = { scene, sfx, BREEDS, get g() { return g; } };
@@ -167,25 +179,64 @@ function doFeed() {
   }));
 }
 let batheWarnUntil = 0;
+/** ทำความสะอาด: สกปรกน้อย → แปรงขน (นก: พ่นละอองน้ำ) · สกปรกมาก → ลงอ่าง (นก: จานน้ำ) */
 function doBathe() {
   const p = need(); if (!p || !g) return;
-  if (p.clean > 0.92) { toast(`${p.name} ยังสะอาดอยู่`); return; }
+  const kind = groomKind(p), bird = breedOf(p.breed).species === 'bird';
+  if (kind === 'none') { toast(`${p.name} ยังสะอาดอยู่`); return; }
+  select(p.id);
+  if (kind === 'brush') {
+    const r = brush(g, p.id); if (!r.ok) { toast(r.reason!); return; }
+    const dur = scene.care(p.id, bird ? 'mist' : 'brush') * 1000;
+    if (bird) sfx.bubbles(); else sfx.sweep();
+    toast(bird ? `พ่นละอองน้ำให้${p.name} ขนเงาสะอาด` : `แปรงขนให้${p.name} ขนฟูนุ่ม`, 2000);
+    voice(p, 'happy', dur - 600);
+    offerMoment(bird ? 'ขนเงาหลังพ่นน้ำ' : 'ขนฟูหลังแปรง', 0, [p.id], dur - 400, 'bath');
+    return;
+  }
   if (isPostVax(p, g.day) && performance.now() > batheWarnUntil) {
     batheWarnUntil = performance.now() + 4000;
     toast('เพิ่งฉีดวัคซีน ควรงดอาบน้ำ 1–2 วัน · กดอีกครั้งถ้าจะอาบจริง', 4000); return;
   }
-  const r = bathe(g, p.id); scene.react(p.id, 'happy'); floatAt(p.id, '🫧');
-  sfx.bubbles();
-  if (r.shampoo) toast(`ใช้แชมพู ${p.name} หอมสะอาดนานขึ้น`, 2000);
-  if (r.fever) { toast(`${p.name} ตัวรุมๆ เป็นไข้หลังฉีดวัคซีน พาไปคลินิกนะ`, 4500); voice(p, 'sad', 900); }
-  else { voice(p, 'happy', 700); offerMoment('ขนฟูหลังอาบน้ำ', 0, [p.id], 900, 'bath'); }
+  const r = bathe(g, p.id);
+  const dur = scene.care(p.id, bird ? 'dish' : 'tub') * 1000;
+  setTimeout(() => sfx.bubbles(), 800); setTimeout(() => sfx.bubbles(), 1800);
+  toast(`${p.name} ตัวมอมแมมมาก ลงอ่างอาบน้ำ${r.shampoo ? 'ด้วยแชมพู' : ''}`, 2200);
+  if (r.fever) setTimeout(() => { toast(`${p.name} ตัวรุมๆ เป็นไข้หลังฉีดวัคซีน พาไปคลินิกนะ`, 4500); voice(p, 'sad'); }, dur);
+  else { voice(p, 'happy', dur - 700); offerMoment('ขนฟูหลังอาบน้ำ', 1, [p.id], dur - 500, 'bath'); }
+}
+/** เล่นด้วยของเล่น: หยิบจากกล่องของเล่น ใช้ทีละครั้ง เสื่อมลงจนพัง */
+function doToy() {
+  const p = need(); if (!p || !g) return;
+  const mine = g.toys.filter(t => fits(toyOf(t.key), p));
+  const others = g.toys.length - mine.length;
+  const s = openPop(`${head(`เล่นกับ ${p.name}`)}
+    ${mine.length ? mine.map(t => { const d = toyOf(t.key); return `<div class="shop-row"><canvas data-k="${t.key}"></canvas><span>${d.name}<small>ใช้ได้อีก ${t.left}/${d.uses} ครั้ง</small><span class="wear"><i style="width:${(t.left / d.uses) * 100}%"></i></span></span><button class="cta mini" data-toy="${t.uid}">เล่น</button></div>`; }).join('')
+      : `<p>ยังไม่มีของเล่นที่${p.name}เล่นได้${others ? ` (มีของเล่นของตัวอื่น ${others} ชิ้น)` : ''} · ซื้อได้ที่ร้าน</p>`}
+    <p><small>เล่นด้วยของเล่นได้วันละ ${B.toyPlaysPerDay} ครั้งต่อตัว ผูกพันเพิ่มมากกว่าแตะเล่น · แตะที่ตัวน้องเพื่อเล่นมือเปล่า</small></p>
+    <button class="cta ghost" id="toshop">ไปร้านของเล่น</button>`);
+  s.querySelectorAll<HTMLCanvasElement>('canvas[data-k]').forEach(cv => itemThumb(cv, cv.dataset.k!));
+  s.querySelector('#toshop')!.addEventListener('click', () => shop('toys'));
+  s.querySelectorAll<HTMLElement>('[data-toy]').forEach(el => el.addEventListener('click', () => {
+    const t = g!.toys.find(x => x.uid === Number(el.dataset.toy)); if (!t) return;
+    const key = t.key, r = playToy(g!, p.id, t.uid);
+    if (!r.ok) { toast(r.reason!); return; }
+    closePop(); select(p.id);
+    const dur = scene.care(p.id, key as FxKind) * 1000;
+    if (key === 'bell') [300, 900, 1500].forEach(ms => setTimeout(() => sfx.bell(), ms));
+    else if (key === 'ball') setTimeout(() => sfx.hop(), 600);
+    voice(p, 'happy', 500); voice(p, 'happy', dur - 400);
+    setTimeout(() => floatAt(p.id, '♥'), dur - 300);
+    toast(r.broke ? `${toyOf(key).name}พังแล้ว เล่นจนเปื่อยเลย` : `เล่น${toyOf(key).name}กับ${p.name}`, r.broke ? 3000 : 1800);
+    offerMoment('เล่นของเล่น', 1, [p.id], 1200, 'play');
+  }));
 }
 function doTrain() {
   const p = need(); if (!p || !g) return;
   if (isSick(p)) { toast(`${p.name} ป่วยอยู่ ฝึกไม่ได้`); return; }
   if (!canTrain(g, p)) { toast(`ฝึกได้อีกใน ${Math.ceil(daysUntilTrain(g, p))} วัน`); return; }
   openPop('');
-  runTraining(sheet, p.name, hits => {
+  runTraining(sheet, p.name, breedOf(p.breed), petStage(p, g.day), hits => {
     const before = p.trained;
     const r = train(g!, p.id, hits); closePop();
     toast(hits ? `${p.name} เก่งขึ้น +${Math.round((p.trained - before) * 100)}%${r.treat ? ' (ใช้ขนมฝึก)' : ''}` : 'รอบนี้พลาดหมด ไว้ลองใหม่สัปดาห์หน้า');
@@ -216,22 +267,46 @@ function doClinic() {
     <p><b>ดูแลประจำ</b></p>${care}
     ${total && !sick ? `<button class="cta" id="all" ${g.money < total ? 'disabled' : ''}>ทำที่ถึงกำหนดทั้งหมด ${total}${COIN}</button>` : ''}
     <p><small>${HEALTH.note}</small></p>`, true);
-  const after = (r: { ok: boolean; reason?: string }, msg: string) => { if (!r.ok) toast(r.reason!); else toast(msg); doClinic(); };
+  /** ทำแล้วปิดคลินิก ดูหมอทำที่ตัวน้อง (เข็ม/ยา) แล้วกลับมาที่คลินิกถ้ายังมีรายการค้าง */
+  const after = (r: { ok: boolean; reason?: string }, msg: string, fx: FxKind[]) => {
+    if (!r.ok) { toast(r.reason!); doClinic(); return; }
+    closePop(); select(p.id);
+    let at = 0;
+    for (const k of fx) {
+      setTimeout(() => {
+        if (!g || !petById(g, p.id)) return;
+        scene.care(p.id, k);
+        if (k === 'syringe') { setTimeout(() => sfx.syringe(), 450); voice(p, 'sad', 550); }
+        else if (k === 'pill') setTimeout(() => sfx.munch(), 950);
+        else setTimeout(() => sfx.bubbles(), 400);
+      }, at);
+      at += (k === 'syringe' ? 1.8 : 1.9) * 1000 + 150;
+    }
+    toast(msg, Math.max(2600, at));
+    setTimeout(() => {
+      if (!g || pop.classList.contains('on')) return;
+      const q = petById(g, p.id), d = q && dueItems(q, g.day);
+      if (q && d && (d.vax.length + d.care.length > 0 || isSick(q))) doClinic();
+    }, at + 200);
+  };
   s.querySelector('#treat')?.addEventListener('click', () => {
-    const r = treat(g!, p.id);
-    if (r.ok) { scene.react(p.id, 'happy'); sfx.coin(); voice(p, 'happy', 400); }
-    after(r, `${p.name} หายป่วยแล้ว`);
+    const med = sick!.med, r = treat(g!, p.id);
+    if (r.ok) { sfx.coin(); voice(p, 'happy', 2200); }
+    after(r, `${p.name} ได้${med} อาการดีขึ้นแล้ว`, [medFx(med)]);
   });
-  s.querySelectorAll<HTMLElement>('[data-v]').forEach(el => el.addEventListener('click', () => { sfx.syringe(); voice(p, 'sad', 250); after(vaccinate(g!, p.id, el.dataset.v!), 'ฉีดแล้ว น้องอาจซึม 1–2 วัน ควรงดอาบน้ำก่อน'); }));
-  s.querySelectorAll<HTMLElement>('[data-c]').forEach(el => el.addEventListener('click', () => { sfx.coin(); after(routineCare(g!, p.id, el.dataset.c!), 'เรียบร้อย'); }));
+  s.querySelectorAll<HTMLElement>('[data-v]').forEach(el => el.addEventListener('click', () => after(vaccinate(g!, p.id, el.dataset.v!), 'ฉีดแล้ว น้องอาจซึม 1–2 วัน ควรงดอาบน้ำก่อน', ['syringe'])));
+  s.querySelectorAll<HTMLElement>('[data-c]').forEach(el => el.addEventListener('click', () => { const k = el.dataset.c!; const r = routineCare(g!, p.id, k); if (r.ok) sfx.coin(); after(r, 'เรียบร้อย', [careFx(k)]); }));
   s.querySelector('#all')?.addEventListener('click', () => {
-    let ok = true;
-    for (const v of due.vax) ok = vaccinate(g!, p.id, v.key).ok && ok;
-    for (const c of due.care) ok = routineCare(g!, p.id, c.key).ok && ok;
-    if (due.vax.length) { sfx.syringe(); voice(p, 'sad', 250); } else sfx.coin();
-    after({ ok }, due.vax.length ? 'ครบแล้ว น้องอาจซึม 1–2 วัน ควรงดอาบน้ำก่อน' : 'เรียบร้อย');
+    let ok = true; const fx: FxKind[] = [];
+    for (const v of due.vax) { const r = vaccinate(g!, p.id, v.key); ok = r.ok && ok; if (r.ok) fx.push('syringe'); }
+    for (const c of due.care) { const r = routineCare(g!, p.id, c.key); ok = r.ok && ok; if (r.ok) fx.push(careFx(c.key)); }
+    sfx.coin();
+    after({ ok: ok || fx.length > 0 }, due.vax.length ? 'ครบแล้ว น้องอาจซึม 1–2 วัน ควรงดอาบน้ำก่อน' : 'เรียบร้อย', fx);
   });
 }
+/** ท่าที่หมอทำกับน้อง: ถ่ายพยาธิ = ป้อนยาเม็ด · เห็บหมัด/วิตามิน = หยดยา */
+const careFx = (key: string): FxKind => (key.endsWith('deworm') ? 'pill' : 'drops');
+const medFx = (med: string): FxKind => (/น้ำเกลือ/.test(med) ? 'syringe' : /หยด|ทา|เห็บ|หมัด|แชมพู/.test(med) ? 'drops' : 'pill');
 function soon(title: string, text: string) { openPop(`${head(title)}<p>${text}</p><p><small>กำลังสร้าง · มาในอัปเดตถัดไป</small></p>`); }
 function showStatus(id: number) {
   if (!g) return;
@@ -250,7 +325,7 @@ function menu() {
   const s = openPop(`${head('เมนู')}
     <button class="opt" id="m-theme"><span>สีตัวเครื่อง</span>›</button>
     <button class="opt" id="m-sound"><span>เสียง</span><span>${settings.sound ? 'เปิด' : 'ปิด'}</span></button>
-    <button class="opt" id="m-adopt" ${g.pets.length >= B.maxPets ? 'disabled' : ''}><span>รับน้องเพิ่ม<br><small>${g.pets.length >= B.maxPets ? `บ้านนี้เลี้ยงได้ ${B.maxPets} ตัว` : `ค่ารับเลี้ยง ${B.adoptPrice}${COIN}`}</small></span>›</button>
+    <button class="opt" id="m-adopt" ${g.pets.length >= maxPets(g) ? 'disabled' : ''}><span>รับน้องเพิ่ม<br><small>${g.pets.length >= maxPets(g) ? `ตอนนี้เลี้ยงได้ ${maxPets(g)} ตัว${(g.expand ?? 0) < EXPANSIONS.length ? ' · ต่อเติมบ้านที่ร้านเพื่อเลี้ยงเพิ่ม' : ''}` : `ค่ารับเลี้ยง ${B.adoptPrice}${COIN} · เลี้ยงอยู่ ${g.pets.length}/${maxPets(g)}`}</small></span>›</button>
     <button class="opt" id="m-heaven"><span>สวนสวรรค์สัตว์เลี้ยง<br><small>${g.heaven.length} ตัว</small></span>›</button>
     <button class="opt" id="m-info"><span>เกี่ยวกับเกม<br><small>โหมด${g.mode === 'hard' ? 'เข้ม' : 'ปกติ'}</small></span>›</button>
     <button class="opt" id="m-move"><span>ย้ายเครื่อง / สำรองเซฟ</span>›</button>
@@ -389,7 +464,7 @@ function themePicker() {
 }
 
 const ACTIONS: Record<string, () => void> = {
-  feed: doFeed, bathe: doBathe, train: doTrain, clinic: doClinic, menu,
+  feed: doFeed, bathe: doBathe, toy: doToy, train: doTrain, clinic: doClinic, menu,
   shop: () => shop(), decor: () => setEdit(true),
   page: () => page(),
 };
@@ -400,7 +475,7 @@ const cycle = (d: number) => {
   const i = g.pets.findIndex(p => p.id === selId);
   select(g.pets[(i + d + g.pets.length) % g.pets.length].id);
 };
-$('room-btn').addEventListener('click', () => { sfx.click(); scene.showRoom(scene.viewRoom === 'terrace' ? 'room' : 'terrace'); });
+$('room-btn').addEventListener('click', () => { sfx.click(); if (g && roomsOf(g).length > 2) roomPicker(); else scene.showRoom(scene.viewRoom === 'terrace' ? 'room' : 'terrace'); });
 $('prev').addEventListener('click', () => cycle(-1));
 $('next').addEventListener('click', () => cycle(1));
 $('chip-time').addEventListener('click', () => { if (!g) return; const c = calendar(g.day); toast(`ปีที่ ${c.year} · ฤดู${SEASONS[c.season]} วันที่ ${c.dayOfSeason}/${B.daysPerSeason}`); });
@@ -409,17 +484,37 @@ $('chip-fans').addEventListener('click', () => { if (g) page(); });
 
 // ---------- ร้าน · จัดบ้าน ----------
 const SPECIES_TH: Record<string, string> = { dog: 'หมา', cat: 'แมว', bird: 'นก' };
-const KIND_TH: Record<string, string> = { bed: 'ที่นอน', toilet: 'ห้องน้ำ', bowl: 'ชามอาหาร', toy: 'ของเล่น', decor: 'ของแต่งบ้าน' };
-function shop() {
+const KIND_TH: Record<string, string> = { bed: 'ที่นอน', toilet: 'ห้องน้ำ', bowl: 'ชามอาหาร', perch: 'ที่เกาะเล่น', decor: 'ของแต่งบ้าน' };
+/** jump = เลื่อนไปหมวดนั้นเลย ('toys' | 'expand') */
+function shop(jump?: string) {
   if (!g) return;
   const owned = (k: string) => g!.items.filter(i => i.key === k).length;
   const row = (f: Furniture) => `<div class="shop-row"><canvas data-k="${f.key}"></canvas><span>${f.name}${owned(f.key) ? ` <small style="display:inline">(มี ${owned(f.key)})</small>` : ''}<small>${f.desc}</small><span class="tags">${f.species.length ? f.species.map(x => SPECIES_TH[x]).join(' · ') : 'ทุกตัว'}</span></span><button class="cta mini" data-buy="${f.key}" ${g!.money < f.price ? 'disabled' : ''}>${f.price}${COIN}</button></div>`;
-  const kinds = ['bed', 'toilet', 'bowl', 'toy', 'decor'];
+  const kinds = ['bed', 'toilet', 'bowl', 'perch', 'decor'];
+  const lv = g.expand ?? 0, ex = EXPANSIONS[lv];
+  const toyCount = (k: string) => g!.toys.filter(t => t.key === k).length;
   const s = openPop(`${head('เพ็ทช็อปปากซอย')}<p>เงิน ${fmtMoney(g.money)}${COIN} · ซื้อแล้ววางในฉากได้ทันที</p>
+    <p class="sec" id="sec-expand">ต่อเติมบ้าน <small style="display:inline">(เลี้ยงได้ ${maxPets(g)} ตัว)</small></p>
+    ${ex ? `<div class="shop-row"><span style="font-size:22px;text-align:center">🛠</span><span>${ROOM_TH[ex.room]} <small style="display:inline">(ขั้น ${lv + 1}/${EXPANSIONS.length})</small><small>${ex.desc} · เลี้ยงได้เพิ่มเป็น ${maxPets(g) + 1} ตัว</small></span><button class="cta mini" id="expand" ${g.money < ex.price ? 'disabled' : ''}>${ex.price.toLocaleString('th-TH')}${COIN}</button></div>` : '<p><small>ต่อเติมครบทุกห้องแล้ว</small></p>'}
+    <p class="sec" id="sec-toys">ของเล่น <small style="display:inline">(เล่นกับน้องทีละครั้ง ใช้จนพัง)</small></p>
+    ${SHOP.toys.map(t => `<div class="shop-row"><canvas data-k="${t.key}"></canvas><span>${t.name}${toyCount(t.key) ? ` <small style="display:inline">(มี ${toyCount(t.key)})</small>` : ''}<small>${t.desc}</small><span class="tags">${t.species.map(x => SPECIES_TH[x]).join(' · ')}</span></span><button class="cta mini" data-toy="${t.key}" ${g!.money < t.price ? 'disabled' : ''}>${t.price}${COIN}</button></div>`).join('')}
     ${kinds.map(k => `<p class="sec">${KIND_TH[k]}</p>${SHOP.furniture.filter(f => f.kind === k).map(row).join('')}`).join('')}
     <p class="sec">ของสิ้นเปลือง</p>
     ${SHOP.supplies.map(su => `<div class="shop-row"><span style="font-size:22px;text-align:center">${{ sand: '🧂', pad: '🧻', shampoo: '🧴', treat: '🦴' }[su.key] ?? '•'}</span><span>${su.name} <small style="display:inline">(เหลือ ${g!.supplies[su.key] ?? 0} ครั้ง)</small><small>${su.desc}</small></span><button class="cta mini" data-sup="${su.key}" ${g!.money < su.price ? 'disabled' : ''}>${su.price}${COIN}</button></div>`).join('')}`, true);
   s.querySelectorAll<HTMLCanvasElement>('canvas[data-k]').forEach(cv => itemThumb(cv, cv.dataset.k!));
+  if (jump) s.querySelector(`#sec-${jump}`)?.scrollIntoView();
+  s.querySelector('#expand')?.addEventListener('click', () => {
+    const r = expandHome(g!);
+    if (!r.ok) { toast(r.reason!); return; }
+    sfx.grow(); closePop(); saveGame(g!);
+    roomLabel(scene.viewRoom); scene.showRoom(r.room!);
+    toast(`ต่อเติม${ROOM_TH[r.room!]}เสร็จแล้ว! เลี้ยงได้ ${maxPets(g!)} ตัว · รับน้องเพิ่มที่เมนู`, 4000);
+  });
+  s.querySelectorAll<HTMLElement>('[data-toy]').forEach(el => el.addEventListener('click', () => {
+    const r = buyToy(g!, el.dataset.toy!);
+    if (!r.ok) { toast(r.reason!); return; }
+    sfx.buy(); toast(`ได้${toyOf(el.dataset.toy!).name}แล้ว · กดปุ่ม "เล่น" เพื่อเล่นกับน้อง`, 2600); shop('toys');
+  }));
   s.querySelectorAll<HTMLElement>('[data-buy]').forEach(el => el.addEventListener('click', () => {
     const r = buyFurniture(g!, el.dataset.buy!);
     if (!r.ok) { toast(r.reason!); return; }
@@ -639,7 +734,7 @@ function renderHud() {
   $('prev').hidden = $('next').hidden = g.pets.length < 2;
   const home = g.pets.filter(x => x.status === 'home');
   const dots: Record<string, boolean> = {
-    feed: home.some(x => x.full < 0.35), bathe: home.some(x => x.clean < 0.3), train: home.some(x => canTrain(g!, x)),
+    feed: home.some(x => x.full < 0.35), bathe: home.some(x => x.clean < 0.6), train: home.some(x => canTrain(g!, x)), toy: false,
     clinic: home.some(x => isSick(x) || (() => { const d = dueItems(x, g!.day); return d.vax.length + d.care.length > 0; })()),
     page: (g.social.album.some(p => !p.posted) && postsLeft(g) > 0) || !!g.social.sponsor.offer,
     shop: false, decor: g.items.some(i => { const f = furnitureOf(i.key); return i.x !== null && toiletCap(f) > 0 && i.fill >= toiletCap(f); }), menu: false,
@@ -680,6 +775,7 @@ function resume() {
 }
 if (g) {
   resume();
+  roomLabel(scene.viewRoom);
   if (g.pets.length) select(g.pets[0].id);
 } else welcome();
 

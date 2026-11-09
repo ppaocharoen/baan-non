@@ -113,6 +113,12 @@ class Sfx {
   // ---------------- เสียงเหตุการณ์ ----------------
   munch() { for (let i = 0; i < 4; i++) this.noise({ dur: 0.05, vol: 0.25, f: 2200 + Math.random() * 800, q: 1.2, at: i * 0.16 + Math.random() * 0.03 }); }
   bubbles() { for (let i = 0; i < 7; i++) { const f = 500 + Math.random() * 900; this.tone({ wave: 'sine', f: [f, f * 1.9], dur: 0.06, vol: 0.14, at: i * 0.07 + Math.random() * 0.04 }); } this.noise({ dur: 0.35, vol: 0.08, f: 3000, q: 0.7 }); }
+  /** โน้ตร้องเพลง (มินิเกมนก) i = ขั้นเสียง 0–4 */
+  note(i: number) { const f = [784, 880, 988, 1175, 1319][i % 5]; this.tone({ wave: 'sine', f: [f, f * 1.06, f], dur: 0.22, vol: 0.16, vibrato: 6 }); }
+  /** กระโดด (มินิเกมหมา) */
+  hop() { this.tone({ wave: 'square', f: [330, 660], dur: 0.1, vol: 0.07, filter: { type: 'lowpass', f: [1800] } }); }
+  /** กระดิ่งนก */
+  bell() { this.tone({ wave: 'triangle', f: [2093], dur: 0.25, vol: 0.12 }); this.tone({ wave: 'triangle', f: [2637], dur: 0.3, vol: 0.08, at: 0.12 }); }
   ding() { this.tone({ wave: 'triangle', f: [1319], dur: 0.12, vol: 0.2 }); this.tone({ wave: 'triangle', f: [1760], dur: 0.25, vol: 0.18, at: 0.08 }); }
   miss() { this.tone({ wave: 'square', f: [180, 120], dur: 0.16, vol: 0.12, filter: { type: 'lowpass', f: [800] } }); }
   coin() { this.tone({ wave: 'square', f: [988], dur: 0.07, vol: 0.1 }); this.tone({ wave: 'square', f: [1319], dur: 0.2, vol: 0.1, at: 0.07 }); }
