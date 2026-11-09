@@ -4,6 +4,7 @@
 import { BALANCE as B } from '../engine/balance';
 import type { Breed } from '../engine/content';
 import { sfx } from './sound';
+import { frameFit } from './sprites';
 
 const W = 160, H = 90;
 const TITLE: Record<Breed['species'], [string, string]> = {
@@ -50,10 +51,11 @@ export function runTraining(host: HTMLElement, petName: string, br: Breed, stage
   /** วาดน้องจากชีตหลัก (4×3): col ท่า · row วัย · (x, feet) = กึ่งกลางล่าง · ht = ความสูงที่ต้องการ */
   const pet = (col: number, x: number, feet: number, ht: number, face = 1) => {
     if (!sheet.complete || !sheet.naturalWidth) return;
-    const fw = sheet.naturalWidth / 4, fh = sheet.naturalHeight / 3, s = ht / fh, w = fw * s;
+    const fit = frameFit(sheet, sheet, 'main', 4, col, stage, br.species === 'bird' && col === 1);
+    const fw = sheet.naturalWidth / 4, fh = sheet.naturalHeight / 3, s = (ht / fh) * fit.k, w = fw * s, hh = fh * s, drop = fit.bottom * s;
     c.save();
     if (face < 0) { c.translate((x * 2) * K, 0); c.scale(-1, 1); }
-    c.drawImage(sheet, col * fw, stage * fh, fw, fh, Math.round((x - w / 2) * K), Math.round((feet - ht) * K), Math.round(w * K), Math.round(ht * K));
+    c.drawImage(sheet, col * fw, stage * fh, fw, fh, Math.round((x - w / 2) * K), Math.round((feet - hh + drop) * K), Math.round(w * K), Math.round(hh * K));
     c.restore();
   };
   const hopCol = stage < 2 ? 3 : 0;

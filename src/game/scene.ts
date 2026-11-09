@@ -9,6 +9,7 @@ import { nightness } from '../engine/time';
 import { Ambient } from './ambient';
 import { drawItem, drawPoop, itemHeight, ITEM_SCALE, spriteW } from './furniture';
 import { drawRoomArt, ROOM_ART, ROOM_W } from './rooms';
+import { frameFit } from './sprites';
 
 /** ความสูงโลก (พิกเซลเกม) — ความกว้างโลกตามสัดส่วนภาพฉาก */
 const WORLD_H = 168;
@@ -658,29 +659,29 @@ export class Scene {
         else if (br.species === 'dog' && stage === 0) { col = 1; lift = step % 2; }
         break;
       case 'eat':
-        if (ready(extra)) { im = extra; cols = 2; col = 0; scale = br.scale * br.xScale; lift = Math.floor(this.t * 4) % 2 ? 0.5 : 0; }
+        if (ready(extra)) { im = extra; cols = 2; col = 0; scale = br.scale; lift = Math.floor(this.t * 4) % 2 ? 0.5 : 0; }
         break;
       case 'happy':
         if (stage < 2) { col = 3; lift = Math.abs(Math.sin(this.t * 9)) * 5; }
-        else if (ready(extra)) { im = extra; cols = 2; col = 1; scale = br.scale * br.xScale; }
+        else if (ready(extra)) { im = extra; cols = 2; col = 1; scale = br.scale; }
         break;
       // ท่านอน: ชีต _s (คอลัมน์ 1 = ขดหลับ) · ถ้ายังไม่โหลดใช้ท่าขดจากแถววัยชรา
       case 'sleep':
-        if (ready(sleepy)) { im = sleepy; cols = 2; col = 0; scale = br.scale * br.sScale; }
+        if (ready(sleepy)) { im = sleepy; cols = 2; col = 0; scale = br.scale; }
         else { col = 3; row = 2; if (stage === 0) scale *= 0.72; }
         break;
       case 'squat': col = 0; lift = -0.5; break;
       default:
         col = 0;
         // ป่วย/ซึมหลังฉีดยา: นอนหมอบตาปรือ (ชีต _s คอลัมน์ 2)
-        if ((isSick(p) || isPostVax(p, g.day)) && ready(sleepy)) { im = sleepy; cols = 2; col = 1; scale = br.scale * br.sScale; }
+        if ((isSick(p) || isPostVax(p, g.day)) && ready(sleepy)) { im = sleepy; cols = 2; col = 1; scale = br.scale; }
     }
     // ท่าดูแล/ของเล่น: ปรับท่า และเตรียมวาดของทับหน้าน้อง
     const fx = a.jump === 0 ? a.fx : null, bird = br.species === 'bird', hop = stage < 2 ? 3 : 0;
     let dx = 0, front: ((sx: number, w: number, h: number) => void) | null = null;
     if (fx) {
       const t = fx.t, base = feet, ft = fx.dur;
-      const ex = () => { if (ready(extra)) { im = extra; cols = 2; scale = br.scale * br.xScale; } };
+      const ex = () => { if (ready(extra)) { im = extra; cols = 2; scale = br.scale; } };
       const reset = () => { im = main; cols = 4; scale = br.scale; row = stage; };
       reset(); col = 0; lift = 0;
       switch (fx.kind) {
@@ -779,9 +780,13 @@ export class Scene {
           break;
       }
     }
+    // ปรับสเกลรายเฟรมให้ทุกท่าขนาดเท่ากัน (นกกางปีกคงขนาดเดิม) และเลื่อนให้เท้าแตะพื้นพอดี
+    const kind = im === extra ? 'x' : im === sleepy ? 's' : 'main';
+    const fit = frameFit(main, im, kind, cols, col, row, bird && kind === 'main' && col === 1);
+    scale *= fit.k;
     const fw = im.naturalWidth / cols, fh = im.naturalHeight / 3;
     const w = fw * scale, h = fh * scale, sx = a.x - this.camX + dx;
-    const x = this.rx(sx - w / 2), y = this.rx(feet - h - lift);
+    const x = this.rx(sx - w / 2), y = this.rx(feet - h - lift + fit.bottom * scale);
     const c = this.ctx;
     if (a.action === 'eat' && !this.itemOf('bowl', p, g) && ready(this.icons)) {
       const ic = foodOf(a.food).icon, iw = this.icons.naturalWidth / 4, ih = this.icons.naturalHeight / 3, s = 0.32;
