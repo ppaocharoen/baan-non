@@ -104,7 +104,7 @@ const ICON = { tub: 4, brush: 5, dish: 6, syringe: 8, bottle: 9, blister: 10 };
 const ease = (u: number) => u * u * (3 - 2 * u);
 
 type Action = 'idle' | 'walk' | 'eat' | 'happy' | 'sleep' | 'squat';
-interface Plan { x: number; action: Action; dur: number; perch?: number; food?: string; room?: RoomKey; fx?: FxKind; }
+interface Plan { x: number; action: Action; dur: number; perch?: number; food?: string; room?: RoomKey; fx?: FxKind; /** นอนหน้าเบาะ (ไม่มีเบาะของตัวเอง) */ front?: boolean; }
 interface Actor {
   id: number; x: number; face: 1 | -1; target: number;
   action: Action; until: number; walkT: number; nextThink: number; food: string;
@@ -114,6 +114,8 @@ interface Actor {
   plan: Plan | null;
   /** กำลังอาบน้ำ/แปรง/ฉีดยา/เล่นของเล่นอยู่ */
   fx: Fx | null;
+  /** นอนอยู่หน้าเบาะ (แถวหน้า) */
+  front: boolean;
 }
 
 const img = (name: string) => { const im = new Image(); im.src = `./art/${name}.png`; return im; };
@@ -325,6 +327,7 @@ export class Scene {
     const p = this.petOf(a.id);
     if (!p) return;
     if (a.fx) return; // กำลังอาบน้ำ/เล่นอยู่ ไม่ไปไหน
+    a.front = false;
     a.plan = plan;
     const room = plan.room ?? p.room, tp = room === p.room ? plan.perch ?? 0 : 0;
     // ต้องลงจากที่สูงก่อน (หรือกระโดดตรงไปที่สูงอีกที่ถ้าอยู่ในแนว)
@@ -390,7 +393,7 @@ export class Scene {
       const dist = (v: number) => Math.min(Infinity, ...others.map(o => Math.abs(o - v)));
       const x = cands.reduce((best, c) => (dist(c) > dist(best) ? c : best), cands[1]);
       this.actors.set(p.id, { id: p.id, x, face: 1, target: x, action: 'idle', until: 0, walkT: 0, nextThink: this.t + 1, food: 'rice',
-        perch: 0, jump: 0, jumpFrom: 0, jumpTo: 0, jumpX0: x, jumpX1: x, door: 0, doorOut: false, plan: null, fx: null });
+        perch: 0, jump: 0, jumpFrom: 0, jumpTo: 0, jumpX0: x, jumpX1: x, door: 0, doorOut: false, plan: null, fx: null, front: false });
     }
   }
 
@@ -411,6 +414,12 @@ export class Scene {
         const idx = this.perchesOf(bed.room).findIndex(q => q.cage === bed.uid);
         if (bed.room !== p.room || a.perch !== idx) { this.go(a, { x: bed.x, action: 'sleep', dur: 30, room: bed.room, perch: idx }); return; }
       } else if (bed && bed.x !== null && (bed.room !== p.room || Math.abs(a.x - bed.x) > 2)) { this.go(a, { x: bed.x, action: 'sleep', dur: 30, room: bed.room }); return; }
+      else if (!bed) {
+        // ไม่มีเบาะของตัวเอง (เบาะเต็ม): มานอนข้างหน้าเบาะที่มีอยู่ ห้องเดียวกันก่อน
+        const spot = this.frontSpot(p, g);
+        if (spot && (spot.room !== p.room || Math.abs(a.x - spot.x) > 2 || a.perch)) { this.go(a, { x: spot.x, action: 'sleep', dur: 30, room: spot.room, front: true }); return; }
+        if (spot) a.front = true;
+      }
       a.action = 'sleep'; a.nextThink = this.t + 6 + Math.random() * 6; return;
     }
     if (lazy || Math.random() > 0.7) { a.action = 'idle'; return; }
@@ -436,6 +445,25 @@ export class Scene {
     const fl = FLOORS[p.room];
     a.target = clamp(a.x + (Math.random() - 0.5) * 120, fl[0], fl[1]);
     a.action = 'walk';
+  }
+
+  /** ที่นอนหน้าเบาะ สำหรับน้องที่ไม่มีเบาะของตัวเอง — เยื้องซ้าย/ขวาไม่ให้ทับกัน */
+  private frontSpot(p: Pet, g: GameState): { x: number; room: RoomKey } | null {
+    const beds = placed(g).filter(i => i.lane !== 2 && furnitureOf(i.key).kind === 'bed' && fits(furnitureOf(i.key), p));
+    const bed = beds.find(i => i.room === p.room) ?? beds[0];
+    if (!bed || bed.x === null) return null;
+    const owned = assignBeds(g);
+    const bedless = g.pets.filter(q => q.status === 'home' && !owned.has(q.id) && fits(furnitureOf(bed.key), q));
+    const i = Math.max(0, bedless.findIndex(q => q.id === p.id));
+    const fl = FLOORS[bed.room], off = [7, -7, 15, -15][i % 4];
+    return { x: clamp(bed.x + off, fl[0], fl[1]), room: bed.room };
+  }
+  /** น้องที่ต้องวาดทับแถวหน้า: นอนหน้าเบาะ หรือนอนบนเบาะที่วางแถวหน้า */
+  private inFront(p: Pet, a: Actor, g: GameState) {
+    if (a.action !== 'sleep' || a.perch || a.jump > 0) return false;
+    if (a.front) return true;
+    const bed = assignBeds(g).get(p.id);
+    return !!bed && bed.lane === 1 && bed.room === p.room && bed.x !== null && Math.abs(bed.x - a.x) < 3;
   }
 
   update(g: GameState, dt: number) {
@@ -486,6 +514,7 @@ export class Scene {
               continue;
             }
             if (a.plan.fx) { this.startFx(a, a.plan.fx); continue; }
+            a.front = !!a.plan.front;
             a.action = a.plan.action; a.until = this.t + a.plan.dur; a.food = a.plan.food ?? a.food;
             a.nextThink = a.until; a.plan = null;
           }
@@ -569,8 +598,11 @@ export class Scene {
       drawPoop(c, x, y, this.rx, po.small, this.t, g.day - po.day);
       this.hits.push({ kind: 'poop', id: po.id, x: po.x - 7, y: y - 12, w: 14, h: 14 });
     }
-    for (const { p, a } of pets.filter(x => x.a.perch === 0 || x.a.jump > 0).sort((u, v) => u.a.x - v.a.x)) this.drawPet(p, a, g);
+    const front = pets.filter(x => (x.a.perch === 0 || x.a.jump > 0) && this.inFront(x.p, x.a, g));
+    for (const { p, a } of pets.filter(x => (x.a.perch === 0 || x.a.jump > 0) && !front.includes(x)).sort((u, v) => u.a.x - v.a.x)) this.drawPet(p, a, g);
     for (const it of here.filter(i => i.lane === 1 && !flat(i.key))) this.drawHomeItem(it, n);
+    // นอนหน้าเบาะ / นอนบนเบาะแถวหน้า: วาดทับเบาะ
+    for (const { p, a } of front.sort((u, v) => u.a.x - v.a.x)) this.drawPet(p, a, g);
     // นกบนคอนที่วางพื้น: วาดหลังคอน
     for (const { p, a } of pets.filter(x => x.a.perch > 0 && x.a.jump === 0 && perchesHere[x.a.perch]?.stand)) this.drawPet(p, a, g);
     // กรงแขวนที่ชายคา: วาดกรงก่อนแล้ววาดนกทับ (ให้เห็นน้องชัด)
@@ -618,6 +650,7 @@ export class Scene {
     }
     const bed = a.action === 'sleep' && !a.perch ? assignBeds(g).get(p.id) : undefined;
     if (bed && bed.x !== null && bed.lane !== 2 && bed.room === p.room && Math.abs(bed.x - a.x) < 3) feet = LANE_Y[bed.lane] - itemHeight(bed.key) * ({ bed: 0.35, coolmat: 0.3, condo: 0.86, cage: 0.3 }[bed.key] ?? 0.3);
+    else if (a.front && a.action === 'sleep' && !a.perch && a.jump === 0) feet = LANE_Y[1] + 3; // นอนหน้าเบาะ
     if (a.jump === 0) switch (a.action) {
       case 'walk':
         col = br.species === 'bird' ? 2 : 1 + (step % 2);
