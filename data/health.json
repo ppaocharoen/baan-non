@@ -4,7 +4,7 @@
   "dueEarly": 1,
   "grace": 3,
   "postVaxDays": 0.5,
-  "postVaxBathFever": 0.3,
+  "postVaxBathFever": 0.3, "recoverDays": 24,
   "vaccines": [
     {
       "key": "dog_combo",

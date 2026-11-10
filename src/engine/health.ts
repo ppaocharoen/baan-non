@@ -20,7 +20,7 @@ export interface Disease {
 }
 
 export const HEALTH = healthJson as {
-  note: string; yearDays: number; maternalDays: number; dueEarly: number; grace: number; postVaxDays: number; postVaxBathFever: number;
+  note: string; yearDays: number; maternalDays: number; dueEarly: number; grace: number; postVaxDays: number; postVaxBathFever: number; recoverDays: number;
   vaccines: Vaccine[]; care: Care[]; diseases: Disease[];
 };
 
@@ -32,6 +32,8 @@ export interface HealthState {
   /** โรคที่เป็นอยู่ (null = ไม่ป่วย) */
   disease: string | null;
   postVaxUntil: number;
+  /** เพิ่งหายป่วย: ร่างกายมีภูมิ ไม่ป่วยซ้ำจนถึงเวลานี้ (ตามนาฬิกาดูแล careClock) */
+  immuneUntil?: number;
 }
 export const newHealth = (): HealthState => ({ vax: {}, care: {}, disease: null, postVaxUntil: -1 });
 
@@ -104,6 +106,7 @@ function careOk(p: Pet, key: string, day: number): boolean {
 
 /** โอกาสเป็นแต่ละโรคต่อวัน ตอนนี้ */
 export function diseaseRisks(p: Pet, day: number, foodSickMult: number, floorMess = 0): { d: Disease; perDay: number }[] {
+  if (p.careClock < (p.health.immuneUntil ?? -1)) return []; // เพิ่งหายป่วย ยังมีภูมิ
   const messRisk = Math.max(0, floorMess - 1) * 0.04; // อึบนพื้นเกิน 1 กอง
   const sp = speciesOf(p), young = day - p.born < breedOf(p.breed).stages[0];
   const out: { d: Disease; perDay: number }[] = [];

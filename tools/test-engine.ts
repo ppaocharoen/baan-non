@@ -234,6 +234,18 @@ function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew', protect =
   bathe(g, id); check('ลงอ่างแล้วสะอาดเต็ม', p.clean === 1);
 }
 
+// ---- หายป่วยแล้วมีภูมิ · ยารักษานับเป็นการดูแลรอบนั้น ----
+{
+  const { g, id } = setup('normal', 'bangkaew', true);
+  const p = g.pets[0];
+  p.health.disease = 'dog_worms'; delete p.health.care.dog_deworm; g.money = 1000;
+  check('รักษาพยาธิ: นับเป็นถ่ายพยาธิรอบนี้ และมีภูมิหลังหาย', treat(g, id).ok && p.health.care.dog_deworm === p.careClock && (p.health.immuneUntil ?? 0) > p.careClock);
+  p.health.vax = {}; p.born = g.day - 100;
+  let sick = 0;
+  for (let d = 0; d < 20; d++) { feed(g, id, 'rice'); tidy(g); sick += advance(g, 1).filter(e => e.type === 'sick').length; }
+  check('ช่วงมีภูมิ (20 วัน) ไม่ป่วยซ้ำแม้ไม่มีวัคซีน', sick === 0);
+}
+
 // ---- ต่อเติมบ้าน ----
 {
   const { g } = setup();

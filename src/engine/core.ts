@@ -250,6 +250,9 @@ export function treat(g: GameState, id: number): Result {
   g.money -= d.price;
   p.health.disease = null;
   p.sickDays = 0;
+  // หายแล้วมีภูมิช่วงหนึ่ง · โรคจากการขาดการดูแลประจำ (พยาธิ เห็บหมัด ฯลฯ) ยาที่รักษานับเป็นการดูแลรอบนั้นไปด้วย
+  p.health.immuneUntil = p.careClock + HEALTH.recoverDays;
+  if (d.cause === 'care' && d.by) p.health.care[d.by] = p.careClock;
   return OK;
 }
 
