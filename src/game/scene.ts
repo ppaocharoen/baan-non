@@ -33,6 +33,8 @@ const eaveY = (room: RoomKey, x: number) => {
 /** who: all = ทุกตัว · climber = แมวกับนก · bird = นกเท่านั้น */
 interface Perch { x0: number; x1: number; y: number; label: string; who: 'all' | 'climber' | 'bird'; cage?: number; /** คอนนกที่วางบนพื้น */ stand?: number }
 /** vp = จุดลับตาของภาพฉาก [x, y] (วัดจากเส้นพื้น/ผนัง/คานในภาพ) */
+/** จุดประตูของห้อง บีบให้อยู่ในแนวพื้นเดินได้เสมอ (ถ้าประตูอยู่นอกพื้น น้องจะเดินไปไม่ถึงแล้วเดินย่ำอยู่กับที่) */
+const doorX = (room: RoomKey) => clamp(ROOMS[room].door, FLOORS[room][0], FLOORS[room][1]);
 interface RoomDef { bg: string; door: number; perches: Perch[]; ambient: boolean; name: string; vp: [number, number]; }
 /** ที่สูงของแต่ละห้อง (พิกัดโลก) — ช่อง 0 คือพื้นเสมอ */
 const ROOMS: Record<RoomKey, RoomDef> = {
@@ -338,7 +340,7 @@ export class Scene {
       return;
     }
     const fl = FLOORS[p.room];
-    if (room !== p.room) a.target = ROOMS[p.room].door;
+    if (room !== p.room) a.target = doorX(p.room);
     else if (a.perch) { const per = this.perchesOf(p.room)[a.perch]; a.target = clamp(plan.x, per.x0 + 3, per.x1 - 3); }
     else a.target = clamp(plan.x, fl[0], fl[1]);
     a.action = 'walk';
@@ -485,7 +487,7 @@ export class Scene {
         if (a.door <= 0) {
           if (a.doorOut) {
             const to: RoomKey = a.plan?.room ?? 'terrace';
-            p.room = to; a.x = ROOMS[to].door; a.doorOut = false; a.door = 0.35;
+            p.room = to; a.x = doorX(to); a.doorOut = false; a.door = 0.35;
             if (this.focusId === p.id && this.t > this.manualUntil) this.showRoom(to, true);
           } else { a.door = 0; if (a.plan) this.go(a, a.plan); }
         }
@@ -502,6 +504,7 @@ export class Scene {
       }
       if (a.perch === 0) a.x = clamp(a.x, fl[0], fl[1]);
       if (a.action === 'walk') {
+        if (a.perch === 0) a.target = clamp(a.target, fl[0], fl[1]);
         const dx = a.target - a.x, speed = petStage(p, g.day) === 2 ? 12 : a.perch === 2 ? 10 : a.plan ? 26 : 20;
         if (Math.abs(dx) < 1) {
           a.action = 'idle';
