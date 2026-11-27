@@ -796,18 +796,26 @@ function chatter(dt: number) {
   const p = (sick.length ? sick : home)[Math.floor(Math.random() * (sick.length || home.length))];
   if (p && nightness(g.day) < 0.6) voice(p, isSick(p) ? 'sad' : 'normal');
 }
-function frame(now: number) {
-  const dt = Math.min(0.25, (now - last) / 1000); last = now;
-  if (g) {
-    handle(tickOnline(g, dt * (urlSpeed || settings.speed || 1), Date.now()));
-    scene.update(g, dt);
-    scene.draw(g);
-    if ((hudT -= dt) <= 0) { hudT = 0.25; renderHud(); }
-    if ((saveT -= dt) <= 0) { saveT = 5; saveGame(g); }
-    chatter(dt);
-    momentWatch(dt);
+/** ลูปหลัก: นัดเฟรมถัดไปก่อนเสมอ และกันแต่ละส่วนแยกกัน — ส่วนไหนพังส่วนอื่นยังเดิน (จอไม่ค้าง) */
+let frameErrShown = false;
+function guard(name: string, fn: () => void) {
+  try { fn(); }
+  catch (e) {
+    console.error(`[${name}]`, e);
+    if (!frameErrShown) { frameErrShown = true; toast(`เกมสะดุดนิดหน่อย (${name}: ${e instanceof Error ? e.message.slice(0, 60) : e}) · ถ้าเจอบ่อย แคปจอส่งมาได้`, 6000); }
   }
+}
+function frame(now: number) {
   requestAnimationFrame(frame);
+  const dt = Math.min(0.25, (now - last) / 1000); last = now;
+  if (!g) return;
+  guard('tick', () => handle(tickOnline(g!, dt * (urlSpeed || settings.speed || 1), Date.now())));
+  guard('update', () => scene.update(g!, dt));
+  guard('draw', () => scene.draw(g!));
+  guard('hud', () => { if ((hudT -= dt) <= 0) { hudT = 0.25; renderHud(); } });
+  guard('save', () => { if ((saveT -= dt) <= 0) { saveT = 5; saveGame(g!); } });
+  guard('chatter', () => chatter(dt));
+  guard('moment', () => momentWatch(dt));
 }
 requestAnimationFrame(frame);
 document.addEventListener('visibilitychange', () => {

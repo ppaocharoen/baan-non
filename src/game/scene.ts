@@ -332,7 +332,9 @@ export class Scene {
     if (a.fx) return; // กำลังอาบน้ำ/เล่นอยู่ ไม่ไปไหน
     a.front = false;
     a.plan = plan;
-    const room = plan.room ?? p.room, tp = room === p.room ? plan.perch ?? 0 : 0;
+    const room = plan.room ?? p.room;
+    if (plan.perch !== undefined && (plan.perch < 0 || plan.perch >= this.perchesOf(room).length)) plan.perch = 0; // ที่สูงหายไปแล้ว → อยู่พื้น
+    const tp = room === p.room ? plan.perch ?? 0 : 0;
     // ต้องลงจากที่สูงก่อน (หรือกระโดดตรงไปที่สูงอีกที่ถ้าอยู่ในแนว)
     if (a.perch && a.perch !== tp) {
       const per = this.perchesOf(p.room)[tp];
@@ -439,6 +441,7 @@ export class Scene {
       const fl = FLOORS[p.room];
       if (a.perch) { this.go(a, { x: clamp(a.x + (Math.random() - 0.5) * 60, fl[0], fl[1]), action: 'idle', dur: 0 }); return; }
       const opts = perches.map((q, i) => ({ q, i })).filter(o => o.i > 0 && this.canUse(o.q, p));
+      if (!opts.length) { a.action = 'idle'; return; } // ห้องนี้ไม่มีที่สูงที่น้องขึ้นได้ (เช่น หมาในครัว)
       const { q, i } = opts[Math.floor(Math.random() * opts.length)];
       const px = q.x0 + 4 + Math.random() * (q.x1 - q.x0 - 8);
       this.go(a, { x: px, action: Math.random() < 0.35 ? 'sleep' : 'idle', dur: 6 + Math.random() * 8, perch: i });
@@ -477,10 +480,37 @@ export class Scene {
     for (const p of g.pets) {
       const a = this.actors.get(p.id);
       if (!a) continue;
-      if (a.fx && a.door === 0 && a.jump === 0) { this.stepFx(a, p, dt); continue; }
+      try { this.stepActor(a, p, g, dt); }
+      catch (e) { this.recover(a, p, e); }
+    }
+    const f = this.focusId !== null ? this.actors.get(this.focusId) : undefined;
+    const fp = f && this.petOf(f.id);
+    if (f && fp && fp.room === this.viewRoom && this.t > this.manualUntil && !this.editMode) {
+      const want = this.clampCam(f.x - this.viewW / 2);
+      this.camX += (want - this.camX) * Math.min(1, dt * 2.5);
+    }
+    this.camX = this.clampCam(this.camX);
+  }
+
+  /** มีปัญหากับน้องตัวไหน: ให้ตัวนั้นกลับไปยืนบนพื้นห้องตัวเอง เกมเดินต่อได้ (ไม่ค้างทั้งจอ) */
+  private recover(a: Actor, p: Pet, e: unknown) {
+    console.error('[scene] รีเซ็ตน้อง', p.name, e);
+    this.errors++;
+    const fl = FLOORS[p.room] ?? FLOORS.terrace;
+    if (!FLOORS[p.room]) p.room = 'terrace';
+    Object.assign(a, { x: clamp(a.x, fl[0], fl[1]), target: clamp(a.x, fl[0], fl[1]), action: 'idle', perch: 0, jump: 0, jumpFrom: 0, jumpTo: 0, door: 0, doorOut: false, plan: null, fx: null, front: false, nextThink: this.t + 2 });
+  }
+  /** จำนวนครั้งที่ต้องรีเซ็ตน้อง (ไว้ตรวจบั๊ก) */
+  errors = 0;
+
+  private stepActor(a: Actor, p: Pet, g: GameState, dt: number) {
+    {
+      if (a.fx && a.door === 0 && a.jump === 0) { this.stepFx(a, p, dt); return; }
       this.think(a, p, g);
       const perches = this.perchesOf(p.room), fl = FLOORS[p.room];
-      if (a.perch >= perches.length) { a.perch = 0; a.jump = 0; } // กรงถูกย้ายออก
+      // ที่สูงหายไป (ย้าย/เก็บกรงหรือคอนนก) ระหว่างยืนหรือกำลังกระโดด → ลงพื้น
+      if (a.perch >= perches.length || a.jumpFrom >= perches.length || a.jumpTo >= perches.length) { a.perch = 0; a.jump = 0; a.jumpFrom = 0; a.jumpTo = 0; }
+      if (a.plan?.perch !== undefined && (a.plan.room ?? p.room) === p.room && (a.plan.perch < 0 || a.plan.perch >= perches.length)) a.plan.perch = 0;
       // ผ่านประตู: จางหายจากห้องนี้ แล้วโผล่อีกห้อง
       if (a.door > 0) {
         a.door -= dt;
@@ -491,7 +521,7 @@ export class Scene {
             if (this.focusId === p.id && this.t > this.manualUntil) this.showRoom(to, true);
           } else { a.door = 0; if (a.plan) this.go(a, a.plan); }
         }
-        continue;
+        return;
       }
       if (a.jump > 0) {
         a.jump += dt / (Math.abs(perches[a.jumpFrom].y - perches[a.jumpTo].y) > 30 ? 0.6 : 0.45);
@@ -500,7 +530,7 @@ export class Scene {
           a.jump = 0; a.perch = a.jumpTo;
           if (a.plan) this.go(a, a.plan);
         }
-        continue;
+        return;
       }
       if (a.perch === 0) a.x = clamp(a.x, fl[0], fl[1]);
       if (a.action === 'walk') {
@@ -510,32 +540,25 @@ export class Scene {
           a.action = 'idle';
           if (a.plan) {
             const room = a.plan.room ?? p.room;
-            if (room !== p.room) { a.door = 0.35; a.doorOut = true; continue; }
+            if (room !== p.room) { a.door = 0.35; a.doorOut = true; return; }
             const tp = a.plan.perch ?? 0;
             if (a.perch !== tp) {
               const q = perches[tp];
               this.startJump(a, tp, tp ? clamp(a.plan.x, q.x0 + 3, q.x1 - 3) : a.x);
-              continue;
+              return;
             }
-            if (a.plan.fx) { this.startFx(a, a.plan.fx); continue; }
+            if (a.plan.fx) { this.startFx(a, a.plan.fx); return; }
             a.front = !!a.plan.front;
             a.action = a.plan.action; a.until = this.t + a.plan.dur; a.food = a.plan.food ?? a.food;
             a.nextThink = a.until; a.plan = null;
           }
-          continue;
+          return;
         }
         a.face = dx > 0 ? 1 : -1;
         a.x += Math.sign(dx) * Math.min(Math.abs(dx), speed * dt);
         a.walkT += dt;
       }
     }
-    const f = this.focusId !== null ? this.actors.get(this.focusId) : undefined;
-    const fp = f && this.petOf(f.id);
-    if (f && fp && fp.room === this.viewRoom && this.t > this.manualUntil && !this.editMode) {
-      const want = this.clampCam(f.x - this.viewW / 2);
-      this.camX += (want - this.camX) * Math.min(1, dt * 2.5);
-    }
-    this.camX = this.clampCam(this.camX);
   }
 
   private stepFx(a: Actor, p: Pet, dt: number) {
@@ -594,7 +617,7 @@ export class Scene {
     const flat = (k: string) => k === 'rug' || k === 'coolmat' || k === 'peepad';
     // น้องบนที่สูง (สูงสุดอยู่หลังสุด) — ยกเว้นในกรงแขวนที่วาดพร้อมกรง
     const perchesHere = this.perchesOf(room);
-    for (const { p, a } of pets.filter(x => x.a.perch > 0 && x.a.jump === 0 && !perchesHere[x.a.perch]?.cage && !perchesHere[x.a.perch]?.stand).sort((u, v) => perchesHere[u.a.perch].y - perchesHere[v.a.perch].y)) this.drawPet(p, a, g);
+    for (const { p, a } of pets.filter(x => x.a.perch > 0 && x.a.jump === 0 && !perchesHere[x.a.perch]?.cage && !perchesHere[x.a.perch]?.stand).sort((u, v) => (perchesHere[u.a.perch]?.y ?? 0) - (perchesHere[v.a.perch]?.y ?? 0))) this.drawPet(p, a, g);
     for (const it of here.filter(i => flat(i.key))) this.drawHomeItem(it, n);
     for (const it of here.filter(i => i.lane === 0 && !flat(i.key))) this.drawHomeItem(it, n);
     for (const po of g.poops.filter(x => x.room === room)) {
@@ -639,7 +662,15 @@ export class Scene {
     }
   }
 
+  /** วาดน้องหนึ่งตัว — ถ้ามีปัญหา ข้ามตัวนั้นไปและรีเซ็ต ไม่ให้ฉากค้างทั้งจอ */
   private drawPet(p: Pet, a: Actor, g: GameState) {
+    const c = this.ctx;
+    c.save();
+    try { this.drawPetInner(p, a, g); }
+    catch (e) { this.recover(a, p, e); }
+    finally { c.restore(); c.globalAlpha = 1; }
+  }
+  private drawPetInner(p: Pet, a: Actor, g: GameState) {
     const br: Breed = breedOf(p.breed), stage = petStage(p, g.day);
     const main = this.sheet(br.art), extra = this.sheet(`${br.art}_x`), sleepy = this.sheet(`${br.art}_s`);
     if (!ready(main)) return;

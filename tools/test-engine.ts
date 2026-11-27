@@ -54,7 +54,7 @@ function setup(mode: 'normal' | 'hard' = 'normal', breed = 'bangkaew', protect =
   const { g, id } = setup('normal', 'bangkaew', true);
   const p = g.pets[0];
   advance(g, 5);
-  check('ความอิ่มลดวันละ 0.04', near(p.full, 0.8 - 0.2, 1e-9));
+  check(`ความอิ่มลดวันละ ${B.fullDecay}`, near(p.full, 0.8 - 5 * B.fullDecay, 1e-9));
   const bond0 = p.bond;
   feed(g, id, 'rice');
   check('ให้อาหารแล้วอิ่มเต็ม + ผูกพัน', p.full === 1 && p.bond > bond0);
